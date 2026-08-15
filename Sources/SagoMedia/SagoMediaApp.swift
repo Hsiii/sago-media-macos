@@ -36,6 +36,7 @@ final class UploadModel {
     var message = ""
     var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
+    var isSignedIn: Bool { (try? Keychain.load()) != nil }
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
 
@@ -114,13 +115,24 @@ final class UploadModel {
                 let device = try await api.startLogin()
                 message = "Approve code \(device.userCode) in your browser"
                 NSWorkspace.shared.open(device.verificationUri)
-                let scope = try await api.waitForApproval(device)
-                message = "Signed in with \(scope) access"
+                _ = try await api.waitForApproval(device)
+                message = ""
             } catch {
                 message = error.localizedDescription
                 NSSound.beep()
             }
             isUploading = false
+        }
+    }
+
+    func logout() {
+        guard !isUploading else { return }
+        do {
+            try Keychain.delete()
+            message = "Signed out"
+        } catch {
+            message = error.localizedDescription
+            NSSound.beep()
         }
     }
 
@@ -231,5 +243,11 @@ enum Keychain {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw MediaError.message("Could not read credentials from Keychain") }
         return token
+    }
+
+    static func delete() throws {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw MediaError.message("Could not remove credentials from Keychain") }
     }
 }
