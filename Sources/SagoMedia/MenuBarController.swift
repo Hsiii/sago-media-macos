@@ -66,9 +66,11 @@ final class MenuBarController: NSObject, ObservableObject {
     }
 
     private func configureStatusItem() {
+        statusItem.autosaveName = "SagoMedia"
         guard let button = statusItem.button else { return }
-        button.image = nil
         button.title = ""
+        button.imagePosition = .imageOnly
+        button.image = NSImage(size: NSSize(width: 14, height: 14))
 
         let iconView = NSHostingView(rootView: MenuBarIcon(controller: self))
         iconView.frame = button.bounds
@@ -80,6 +82,13 @@ final class MenuBarController: NSObject, ObservableObject {
         dropView.delegate = self
         button.addSubview(dropView)
         updateAccessibility()
+#if DEBUG
+        Task { @MainActor [weak self, weak button] in
+            await Task.yield()
+            guard let self, let button else { return }
+            smokeLog("status visible=\(statusItem.isVisible) button=\(button.frame) window=\(String(describing: button.window?.frame))")
+        }
+#endif
     }
 
     private func setActivityState(_ state: MenuBarState) {
@@ -324,7 +333,6 @@ private struct MenuBarIcon: View {
         Group {
             if #available(macOS 26.0, *) {
                 iconContent
-                    .contentTransition(.symbolEffect(.automatic))
                     .symbolEffect(
                         .wiggle.up.byLayer,
                         value: controller.targetedEffectTrigger
@@ -357,7 +365,6 @@ private struct MenuBarIcon: View {
         .font(.system(size: 14, weight: .regular))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .symbolEffectsRemoved(reduceMotion)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controller.displayedState)
         .accessibilityLabel(controller.displayedState.accessibilityLabel)
         .allowsHitTesting(false)
     }
