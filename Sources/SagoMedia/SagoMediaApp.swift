@@ -31,10 +31,10 @@ struct UploadResult: Identifiable, Decodable {
 }
 
 @MainActor
-final class UploadModel: ObservableObject {
-    @Published var isUploading = false
-    @Published var message = ""
-    @Published var recent: [UploadResult] = []
+final class UploadModel {
+    var isUploading = false
+    var message = ""
+    var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
@@ -231,74 +231,5 @@ enum Keychain {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw MediaError.message("Could not read credentials from Keychain") }
         return token
-    }
-}
-
-struct SharePanel: View {
-    @ObservedObject var model: UploadModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if !model.message.isEmpty {
-                Text(model.message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            uploadActions
-
-            if !model.recent.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recent").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(model.recent.prefix(5)) { item in
-                        Button {
-                            model.copy(item.url)
-                            model.message = "Copied link"
-                        } label: {
-                            HStack {
-                                Image(systemName: "link")
-                                Text(URL(string: item.url)?.lastPathComponent ?? item.url).lineLimit(1)
-                                Spacer()
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 40)
-                    }
-                }
-            }
-
-            HStack {
-                Button("Sign in", action: model.login)
-                Button("Access requests") { NSWorkspace.shared.open(URL(string: "https://media.hsichen.dev/admin")!) }
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-        }
-        .padding(16)
-        .frame(width: 360)
-    }
-
-    private var uploadActions: some View {
-        HStack(spacing: 8) {
-            Button("Paste", action: model.pasteFiles)
-                .buttonStyle(.borderless)
-                .frame(minHeight: 40)
-                .keyboardShortcut("v", modifiers: .command)
-
-            Text("or")
-                .foregroundStyle(.secondary)
-
-            Button("Choose Files…", action: model.chooseFiles)
-                .buttonStyle(.link)
-                .frame(minHeight: 40)
-                .keyboardShortcut("o", modifiers: .command)
-
-            Spacer()
-        }
-        .frame(minHeight: 40)
-        .disabled(model.isUploading)
     }
 }
