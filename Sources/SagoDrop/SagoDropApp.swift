@@ -11,8 +11,8 @@ func smokeLog(_ message: String) {
 #endif
 
 @main
-struct SagoMediaApp: App {
-    @NSApplicationDelegateAdaptor private var appDelegate: SagoMediaAppDelegate
+struct SagoDropApp: App {
+    @NSApplicationDelegateAdaptor private var appDelegate: SagoDropAppDelegate
 
     var body: some Scene {
         Settings { EmptyView() }
@@ -20,7 +20,7 @@ struct SagoMediaApp: App {
 }
 
 @MainActor
-final class SagoMediaAppDelegate: NSObject, NSApplicationDelegate {
+final class SagoDropAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -287,10 +287,10 @@ struct MediaAPI {
     private func decode<Value: Decodable>(_ data: Data, response: URLResponse, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) throws -> Value {
         guard let http = response as? HTTPURLResponse, acceptedStatuses.contains(http.statusCode) else {
             let detail = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MediaError.message(detail?.isEmpty == false ? detail! : "Sago Media request failed")
+            throw MediaError.message(detail?.isEmpty == false ? detail! : "Sago Drop request failed")
         }
         do { return try JSONDecoder().decode(type, from: data) }
-        catch { throw MediaError.message("Sago Media returned an invalid response") }
+        catch { throw MediaError.message("Sago Drop returned an invalid response") }
     }
 }
 
@@ -315,7 +315,7 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @u
 }
 
 enum Keychain {
-    private static let service = "dev.hsichen.SagoMedia"
+    private static let service = "dev.hsichen.SagoDrop"
     private static let account = "upload-token"
 
     static func save(_ token: String) throws {

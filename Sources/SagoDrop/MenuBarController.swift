@@ -21,12 +21,12 @@ enum MenuBarState: Equatable {
 
     var accessibilityLabel: String {
         switch self {
-        case .idle: "Sago Media, ready to upload"
-        case .targeted: "Sago Media, release to upload"
-        case .converting: "Sago Media, converting video"
-        case .uploading: "Sago Media, uploading"
-        case .success: "Sago Media, link copied"
-        case .failure: "Sago Media, upload failed"
+        case .idle: "Sago Drop, ready to upload"
+        case .targeted: "Sago Drop, release to upload"
+        case .converting: "Sago Drop, converting video"
+        case .uploading: "Sago Drop, uploading"
+        case .success: "Sago Drop, link copied"
+        case .failure: "Sago Drop, upload failed"
         }
     }
 
@@ -233,7 +233,7 @@ final class MenuBarController: NSObject, ObservableObject {
             menu.addItem(actionItem("Sign In", action: #selector(signIn), enabled: !model.isUploading))
         }
         menu.addItem(.separator())
-        menu.addItem(actionItem("Quit Sago Media", action: #selector(quit)))
+        menu.addItem(actionItem("Quit Sago Drop", action: #selector(quit)))
     }
 
     private func actionItem(_ title: String, action: Selector, keyEquivalent: String = "", enabled: Bool = true) -> NSMenuItem {

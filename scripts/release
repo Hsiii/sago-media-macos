@@ -26,7 +26,7 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
   exit 1
 fi
 
-output="$(SAGO_MEDIA_NOTARY_PROFILE="${SAGO_MEDIA_NOTARY_PROFILE:-Sago Media}" scripts/package-app "$version")"
+output="$(SAGO_DROP_NOTARY_PROFILE="${SAGO_DROP_NOTARY_PROFILE:-Sago Drop}" scripts/package-app "$version")"
 archive="$(sed -n 's/^archive=//p' <<<"$output")"
 cask="$(sed -n 's/^cask=//p' <<<"$output")"
 tag="v$version"
@@ -43,5 +43,5 @@ gh release create "$tag" \
   "$cask"
 gh release edit "$tag" --draft=false --latest
 
-printf 'release=https://github.com/Hsiii/sago-media-macos/releases/tag/%s\n' "$tag"
+printf 'release=https://github.com/Hsiii/sago-drop/releases/tag/%s\n' "$tag"
 printf 'cask=%s\n' "$cask"

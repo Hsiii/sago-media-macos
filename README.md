@@ -1,9 +1,9 @@
-<h1 align="center">Sago Media</h1>
+<h1 align="center">Sago Drop</h1>
 <div align="center">
 
   Turn Mac screen recordings that are too large for Discord into links you can paste instead.
 
-  <a href="https://github.com/Hsiii/sago-media-macos/releases/latest">Download latest release</a>
+  <a href="https://github.com/Hsiii/sago-drop/releases/latest">Download latest release</a>
    ·
   <a href="#install">Install with Homebrew</a>
 </div>
@@ -11,10 +11,10 @@
 ## Why
 
 Discord rejects videos once they get too large, but sending a link is easy. Drop
-the recording on Sago Media's menu-bar icon; it converts MOV files locally,
+the recording on Sago Drop's menu-bar icon; it converts MOV files locally,
 uploads the video, and copies a share link ready to paste into Discord.
 
-Sago Media also uploads images and other videos when you want the same quick
+Sago Drop also uploads images and other videos when you want the same quick
 drop-to-link workflow.
 
 - **Drop, paste, or choose:** Upload directly from the menu bar without opening
@@ -31,11 +31,11 @@ drop-to-link workflow.
 Install with Homebrew:
 
 ```bash
-brew install --cask Hsiii/tap/sago-media
+brew install --cask Hsiii/tap/sago-drop
 ```
 
 Or download the latest signed and notarized app from
-[GitHub Releases](https://github.com/Hsiii/sago-media-macos/releases/latest).
+[GitHub Releases](https://github.com/Hsiii/sago-drop/releases/latest).
 
 Requirements:
 
@@ -44,7 +44,7 @@ Requirements:
 
 ## First Run
 
-1. Open Sago Media from Applications. It appears in the menu bar instead of the
+1. Open Sago Drop from Applications. It appears in the menu bar instead of the
    Dock.
 2. Choose **Sign In** from its menu.
 3. Approve the displayed request in your browser.
@@ -64,7 +64,7 @@ remain available under **Recent Uploads**.
 
 ## Formats and Limits
 
-- MOV recordings can be up to 500 MB. Sago Media first tries a lossless MP4
+- MOV recordings can be up to 500 MB. Sago Drop first tries a lossless MP4
   container conversion, then compresses locally when necessary.
 - The converted upload must fit within 90 MB.
 - Other supported files must already be under 90 MB.
@@ -75,7 +75,7 @@ remain available under **Recent Uploads**.
 - The device credential is stored in macOS Keychain.
 - MOV conversion happens locally on the Mac.
 - Files are uploaded to `media.hsichen.dev` and receive a public share URL.
-- Sago Media has no analytics or background file scanning.
+- Sago Drop has no analytics or background file scanning.
 
 ## Troubleshooting
 
@@ -85,7 +85,7 @@ remain available under **Recent Uploads**.
   are accepted as conversion sources; other files must fit the upload limit
   already.
 - **Homebrew installed an older version:** Run `brew update`, then
-  `brew upgrade --cask Hsiii/tap/sago-media`.
+  `brew upgrade --cask Hsiii/tap/sago-drop`.
 - **Two menu-bar icons appear:** Quit either the development build or the
   installed app so only one copy remains open.
 
@@ -101,7 +101,7 @@ Build and launch a local app bundle:
 
 ```bash
 scripts/build-app
-open ".build/Sago Media.app"
+open ".build/Sago Drop.app"
 ```
 
 Run the agent-safe upload progress smoke suite:
@@ -117,7 +117,7 @@ successful and failed uploads without reading Keychain or creating public media.
 
 `scripts/package-app <version>` builds the hardened-runtime app, signs it with
 the configured Developer ID Application certificate, notarizes it when
-`SAGO_MEDIA_NOTARY_PROFILE` is set, and creates the release ZIP and Homebrew
+`SAGO_DROP_NOTARY_PROFILE` is set, and creates the release ZIP and Homebrew
 cask in `dist/`.
 
 Release from a clean `main` that exactly matches `origin/main`:
@@ -126,7 +126,7 @@ Release from a clean `main` that exactly matches `origin/main`:
 scripts/release <version> "<user-facing change>"
 ```
 
-The release script uses the `Sago Media` notarytool Keychain profile by default,
+The release script uses the `Sago Drop` notarytool Keychain profile by default,
 publishes the ZIP and cask without changing `main`, and leaves the generated
 cask ready for a pull request to `Hsiii/homebrew-tap`.
 

@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "SagoMedia",
+    name: "SagoDrop",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "SagoMedia", targets: ["SagoMedia"])],
+    products: [.executable(name: "SagoDrop", targets: ["SagoDrop"])],
     targets: [
-        .executableTarget(name: "SagoMedia"),
-        .testTarget(name: "SagoMediaTests", dependencies: ["SagoMedia"]),
+        .executableTarget(name: "SagoDrop"),
+        .testTarget(name: "SagoDropTests", dependencies: ["SagoDrop"]),
     ]
 )

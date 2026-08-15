@@ -41,7 +41,7 @@ enum MediaPreparation {
 
         let identifier = UUID().uuidString
         let remuxedURL = FileManager.default.temporaryDirectory
-            .appending(path: "sago-media-\(identifier)-remuxed.mp4")
+            .appending(path: "sago-drop-\(identifier)-remuxed.mp4")
 
         do {
             try await export(sourceURL, to: remuxedURL, preset: AVAssetExportPresetPassthrough)
@@ -54,7 +54,7 @@ enum MediaPreparation {
 
         try? FileManager.default.removeItem(at: remuxedURL)
         let compressedURL = FileManager.default.temporaryDirectory
-            .appending(path: "sago-media-\(identifier)-compressed.mp4")
+            .appending(path: "sago-drop-\(identifier)-compressed.mp4")
         do {
             try await export(
                 sourceURL,
