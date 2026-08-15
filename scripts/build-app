@@ -2,6 +2,8 @@
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+version="${SAGO_MEDIA_VERSION:-0.1.0}"
+build_number="${SAGO_MEDIA_BUILD_NUMBER:-1}"
 swift build --package-path "$root" -c release
 
 bundle="$root/.build/Sago Media.app"
@@ -15,8 +17,8 @@ printf '%s\n' \
   '<key>CFBundleIdentifier</key><string>dev.hsichen.SagoMedia</string>' \
   '<key>CFBundleName</key><string>Sago Media</string>' \
   '<key>CFBundlePackageType</key><string>APPL</string>' \
-  '<key>CFBundleShortVersionString</key><string>0.1.0</string>' \
-  '<key>CFBundleVersion</key><string>1</string>' \
+  "<key>CFBundleShortVersionString</key><string>$version</string>" \
+  "<key>CFBundleVersion</key><string>$build_number</string>" \
   '<key>NSHumanReadableCopyright</key><string>Copyright © 2026 Hsi Chen</string>' \
   '<key>LSMinimumSystemVersion</key><string>14.0</string>' \
   '<key>LSUIElement</key><true/>' \

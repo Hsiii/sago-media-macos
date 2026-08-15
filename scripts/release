@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+version="${1:-}"
+change="${2:-}"
+
+if [ -z "$version" ] || [ -z "$change" ]; then
+  echo 'Usage: scripts/release <version> <user-facing change>' >&2
+  exit 1
+fi
+
+cd "$root"
+if [ "$(git branch --show-current)" != main ]; then
+  echo "Release from main after the version change is merged." >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Release requires a clean working tree." >&2
+  exit 1
+fi
+
+git fetch origin main
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+  echo "Local main must exactly match origin/main." >&2
+  exit 1
+fi
+
+output="$(SAGO_MEDIA_NOTARY_PROFILE="${SAGO_MEDIA_NOTARY_PROFILE:-Sago Media}" scripts/package-app "$version")"
+archive="$(sed -n 's/^archive=//p' <<<"$output")"
+cask="$(sed -n 's/^cask=//p' <<<"$output")"
+tag="v$version"
+notes="## What's Changed"
+notes+=$'\n\n- '
+notes+="$change"
+
+gh release create "$tag" \
+  --target main \
+  --title "$tag" \
+  --notes "$notes" \
+  --draft \
+  "$archive" \
+  "$cask"
+gh release edit "$tag" --draft=false --latest
+
+printf 'release=https://github.com/Hsiii/sago-media-macos/releases/tag/%s\n' "$tag"
+printf 'cask=%s\n' "$cask"
