@@ -4,16 +4,45 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 app="$root/.build/Sago Media.app"
 output_dir="$root/dist"
-archive="$output_dir/Sago-Media-0.1.0.zip"
+version="${1:-0.1.0}"
+archive="$output_dir/Sago-Media-$version.zip"
+cask="$output_dir/sago-media.rb"
 
-"$root/scripts/build-app"
+if ! [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+  echo "Invalid version: $version" >&2
+  exit 1
+fi
+
+SAGO_MEDIA_VERSION="$version" SAGO_MEDIA_BUILD_NUMBER="$version" \
+  "$root/scripts/build-app"
 mkdir -p "$output_dir"
+rm -f "$archive"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 
 if [ -n "${SAGO_MEDIA_NOTARY_PROFILE:-}" ]; then
   xcrun notarytool submit "$archive" --keychain-profile "$SAGO_MEDIA_NOTARY_PROFILE" --wait
   xcrun stapler staple "$app"
+  rm -f "$archive"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 fi
 
-printf '%s\n' "$archive"
+sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
+cat >"$cask" <<EOF
+cask "sago-media" do
+  version "$version"
+  sha256 "$sha256"
+
+  url "https://github.com/Hsiii/sago-media-macos/releases/download/v#{version}/Sago-Media-#{version}.zip"
+  name "Sago Media"
+  desc "Upload files from the macOS menu bar"
+  homepage "https://github.com/Hsiii/sago-media-macos"
+
+  depends_on macos: :sonoma
+
+  app "Sago Media.app"
+end
+EOF
+
+printf 'archive=%s\n' "$archive"
+printf 'sha256=%s\n' "$sha256"
+printf 'cask=%s\n' "$cask"

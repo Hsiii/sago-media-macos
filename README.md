@@ -18,7 +18,18 @@ URL to the clipboard.
 
 ## Distribution
 
-`scripts/package-app` builds a hardened-runtime app signed with the local
-Developer ID Application certificate and creates `dist/Sago-Media-0.1.0.zip`.
-Set `SAGO_MEDIA_NOTARY_PROFILE` to a `notarytool` Keychain profile to notarize
-and staple the app during packaging.
+`scripts/package-app 0.1.0` builds a hardened-runtime app signed with the local
+Developer ID Application certificate, notarizes it when
+`SAGO_MEDIA_NOTARY_PROFILE` is set, and creates both the release ZIP and a
+Homebrew cask in `dist/`.
+
+After release changes are merged through a pull request, release from a clean,
+up-to-date `main`:
+
+```bash
+scripts/release 0.1.0 "Upload files from the menu bar"
+```
+
+The release script uses the `Sago Media` notarytool Keychain profile by default,
+publishes the notarized ZIP and cask without changing `main`, and leaves the
+generated cask ready for a pull request to `Hsiii/homebrew-tap`.
