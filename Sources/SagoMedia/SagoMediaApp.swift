@@ -1,6 +1,7 @@
 import AppKit
 import Security
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct SagoMediaApp: App {
@@ -12,10 +13,6 @@ struct SagoMediaApp: App {
         } label: {
             Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "square.and.arrow.up")
                 .symbolEffect(.pulse, isActive: model.isUploading)
-                .dropDestination(for: URL.self) { urls, _ in
-                    model.upload(urls.filter(\.isFileURL))
-                    return !urls.isEmpty
-                }
         }
         .menuBarExtraStyle(.window)
     }
@@ -33,13 +30,43 @@ struct UploadResult: Identifiable, Decodable {
 @MainActor
 final class UploadModel: ObservableObject {
     @Published var isUploading = false
-    @Published var isDropTargeted = false
-    @Published var message = "Drop a file to copy its share link"
+    @Published var message = "Links copy automatically after upload"
     @Published var recent: [UploadResult] = []
     private let api = MediaAPI()
+    private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mp4", "png", "webm", "webp"])
+
+    func chooseFiles() {
+        guard !isUploading else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = supportedExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Choose images or web-ready videos to upload"
+        panel.prompt = "Upload"
+        if panel.runModal() == .OK { upload(panel.urls) }
+    }
+
+    func pasteFiles() {
+        guard !isUploading else { return }
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let urls = (NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: options) as? [NSURL])?
+            .map { $0 as URL } ?? []
+        guard !urls.isEmpty else {
+            message = "Copy a supported file in Finder first"
+            NSSound.beep()
+            return
+        }
+        upload(urls)
+    }
 
     func upload(_ urls: [URL]) {
-        guard !urls.isEmpty, !isUploading else { return }
+        let urls = urls.filter { $0.isFileURL && supportedExtensions.contains($0.pathExtension.lowercased()) }
+        guard !isUploading else { return }
+        guard !urls.isEmpty else {
+            message = "Choose PNG, JPEG, GIF, WebP, MP4, or WebM files"
+            NSSound.beep()
+            return
+        }
         isUploading = true
         message = urls.count == 1 ? "Uploading \(urls[0].lastPathComponent)…" : "Uploading \(urls.count) files…"
         Task {
@@ -193,7 +220,7 @@ struct SharePanel: View {
                 Text(model.message).font(.subheadline).foregroundStyle(.secondary)
             }
 
-            dropTarget
+            uploadActions
 
             if !model.recent.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -228,19 +255,41 @@ struct SharePanel: View {
         .frame(width: 360)
     }
 
-    private var dropTarget: some View {
-        VStack(spacing: 8) {
-            Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "tray.and.arrow.up")
-                .font(.system(size: 28))
-                .symbolEffect(.pulse, isActive: model.isUploading)
-            Text(model.isUploading ? "Uploading" : "Drop files here").fontWeight(.medium)
+    private var uploadActions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "square.and.arrow.up")
+                    .font(.system(size: 20, weight: .medium))
+                    .symbolEffect(.pulse, isActive: model.isUploading)
+                    .frame(width: 40, height: 40)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.isUploading ? "Uploading" : "Upload files").fontWeight(.semibold)
+                    Text("Paste files copied from Finder, or choose them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(action: model.pasteFiles) {
+                    Label("Paste Files", systemImage: "doc.on.clipboard")
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut("v", modifiers: .command)
+
+                Button(action: model.chooseFiles) {
+                    Label("Choose Files…", systemImage: "folder")
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut("o", modifiers: .command)
+            }
+            .disabled(model.isUploading)
         }
-        .frame(maxWidth: .infinity, minHeight: 112)
-        .background(model.isDropTargeted ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.08)))
-        .dropDestination(for: URL.self, action: { urls, _ in
-            model.upload(urls.filter(\.isFileURL))
-            return !urls.isEmpty
-        }, isTargeted: { model.isDropTargeted = $0 })
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
     }
 }
