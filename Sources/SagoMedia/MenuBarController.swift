@@ -85,6 +85,9 @@ final class MenuBarController: NSObject, ObservableObject {
     private func setActivityState(_ state: MenuBarState) {
         resetTask?.cancel()
         activityState = state
+#if DEBUG
+        smokeLog("state=\(String(describing: state))")
+#endif
         switch state {
         case .success:
             successEffectTrigger += 1
@@ -139,6 +142,9 @@ final class MenuBarController: NSObject, ObservableObject {
                     try? await Task.sleep(for: .milliseconds(350))
                     guard !Task.isCancelled, self?.isFinishingUpload == true else { return }
                     self?.uploadProgress = target
+#if DEBUG
+                    smokeLog("tail displayed=\(target)")
+#endif
                 }
             }
         case nil:
@@ -147,6 +153,11 @@ final class MenuBarController: NSObject, ObservableObject {
             uploadProgress = nil
         }
 
+#if DEBUG
+        let displayedProgress = uploadProgress.map { String($0) } ?? "none"
+        let actualProgress = uploadPercentage.map { String($0) } ?? "none"
+        smokeLog("progress displayed=\(displayedProgress) actual=\(actualProgress) finishing=\(isFinishingUpload)")
+#endif
         updateAccessibility()
     }
 

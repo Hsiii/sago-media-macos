@@ -3,6 +3,13 @@ import Security
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if DEBUG
+func smokeLog(_ message: String) {
+    guard ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_LOG"] == "1" else { return }
+    FileHandle.standardError.write(Data("SMOKE \(message)\n".utf8))
+}
+#endif
+
 @main
 struct SagoMediaApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: SagoMediaAppDelegate
@@ -17,7 +24,20 @@ final class SagoMediaAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        menuBarController = MenuBarController(model: UploadModel())
+        let model = UploadModel()
+        menuBarController = MenuBarController(model: model)
+#if DEBUG
+        if let testFile = ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_FILE"] {
+            model.onSmokeTestComplete = { succeeded in
+                smokeLog("complete success=\(succeeded)")
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(250))
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+            Task { @MainActor in model.upload([URL(fileURLWithPath: testFile)]) }
+        }
+#endif
     }
 }
 
@@ -43,6 +63,9 @@ final class UploadModel {
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     var isSignedIn: Bool { (try? Keychain.load()) != nil }
     var onUploadProgressChange: ((UploadProgressUpdate?) -> Void)?
+#if DEBUG
+    var onSmokeTestComplete: ((Bool) -> Void)?
+#endif
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
     private var processingStartedAt: Date?
@@ -137,6 +160,9 @@ final class UploadModel {
             }
             isUploading = false
             onMenuBarStateChange?(failed ? .failure : .success)
+#if DEBUG
+            onSmokeTestComplete?(!failed)
+#endif
         }
     }
 
@@ -233,7 +259,7 @@ struct MediaAPI {
     }
 
     func upload(_ fileURL: URL, onProgress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> UploadResult {
-        guard let token = try Keychain.load() else { throw MediaError.message("Sign in before uploading") }
+        guard let token = try uploadToken() else { throw MediaError.message("Sign in before uploading") }
         var request = URLRequest(url: baseURL.appending(path: "/v1/uploads"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -242,6 +268,15 @@ struct MediaAPI {
         let delegate = UploadProgressDelegate(onProgress: onProgress)
         let (data, response) = try await session.upload(for: request, fromFile: fileURL, delegate: delegate)
         return try decode(data, response: response, as: UploadResult.self)
+    }
+
+    private func uploadToken() throws -> String? {
+#if DEBUG
+        if let smokeToken = ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_TOKEN"] {
+            return smokeToken
+        }
+#endif
+        return try Keychain.load()
     }
 
     private func send<Value: Decodable>(_ request: URLRequest, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) async throws -> Value {
