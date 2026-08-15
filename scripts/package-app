@@ -2,25 +2,25 @@
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-app="$root/.build/Sago Media.app"
+app="$root/.build/Sago Drop.app"
 output_dir="$root/dist"
 version="${1:-0.1.0}"
-archive="$output_dir/Sago-Media-$version.zip"
-cask="$output_dir/sago-media.rb"
+archive="$output_dir/Sago-Drop-$version.zip"
+cask="$output_dir/sago-drop.rb"
 
 if ! [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
   echo "Invalid version: $version" >&2
   exit 1
 fi
 
-SAGO_MEDIA_VERSION="$version" SAGO_MEDIA_BUILD_NUMBER="$version" \
+SAGO_DROP_VERSION="$version" SAGO_DROP_BUILD_NUMBER="$version" \
   "$root/scripts/build-app"
 mkdir -p "$output_dir"
 rm -f "$archive"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 
-if [ -n "${SAGO_MEDIA_NOTARY_PROFILE:-}" ]; then
-  xcrun notarytool submit "$archive" --keychain-profile "$SAGO_MEDIA_NOTARY_PROFILE" --wait
+if [ -n "${SAGO_DROP_NOTARY_PROFILE:-}" ]; then
+  xcrun notarytool submit "$archive" --keychain-profile "$SAGO_DROP_NOTARY_PROFILE" --wait
   xcrun stapler staple "$app"
   rm -f "$archive"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
@@ -28,18 +28,18 @@ fi
 
 sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
 cat >"$cask" <<EOF
-cask "sago-media" do
+cask "sago-drop" do
   version "$version"
   sha256 "$sha256"
 
-  url "https://github.com/Hsiii/sago-media-macos/releases/download/v#{version}/Sago-Media-#{version}.zip"
-  name "Sago Media"
+  url "https://github.com/Hsiii/sago-drop/releases/download/v#{version}/Sago-Drop-#{version}.zip"
+  name "Sago Drop"
   desc "Upload files from the menu bar"
-  homepage "https://github.com/Hsiii/sago-media-macos"
+  homepage "https://github.com/Hsiii/sago-drop"
 
   depends_on macos: :sonoma
 
-  app "Sago Media.app"
+  app "Sago Drop.app"
 end
 EOF
 

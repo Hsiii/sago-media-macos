@@ -2,20 +2,20 @@
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-version="${SAGO_MEDIA_VERSION:-0.1.0}"
-build_number="${SAGO_MEDIA_BUILD_NUMBER:-1}"
+version="${SAGO_DROP_VERSION:-0.1.0}"
+build_number="${SAGO_DROP_BUILD_NUMBER:-1}"
 swift build --package-path "$root" -c release
 
-bundle="$root/.build/Sago Media.app"
+bundle="$root/.build/Sago Drop.app"
 mkdir -p "$bundle/Contents/MacOS"
-cp "$root/.build/release/SagoMedia" "$bundle/Contents/MacOS/SagoMedia"
+cp "$root/.build/release/SagoDrop" "$bundle/Contents/MacOS/SagoDrop"
 printf '%s\n' \
   '<?xml version="1.0" encoding="UTF-8"?>' \
   '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
   '<plist version="1.0"><dict>' \
-  '<key>CFBundleExecutable</key><string>SagoMedia</string>' \
-  '<key>CFBundleIdentifier</key><string>dev.hsichen.SagoMedia</string>' \
-  '<key>CFBundleName</key><string>Sago Media</string>' \
+  '<key>CFBundleExecutable</key><string>SagoDrop</string>' \
+  '<key>CFBundleIdentifier</key><string>dev.hsichen.SagoDrop</string>' \
+  '<key>CFBundleName</key><string>Sago Drop</string>' \
   '<key>CFBundlePackageType</key><string>APPL</string>' \
   "<key>CFBundleShortVersionString</key><string>$version</string>" \
   "<key>CFBundleVersion</key><string>$build_number</string>" \
@@ -27,7 +27,7 @@ printf '%s\n' \
 
 printf '%s\n' "$bundle"
 
-identity="${SAGO_MEDIA_CODESIGN_IDENTITY:-Developer ID Application: Hsi Chen (D925G8G7CS)}"
+identity="${SAGO_DROP_CODESIGN_IDENTITY:-Developer ID Application: Hsi Chen (D925G8G7CS)}"
 codesign_args=(--force --deep --options runtime --sign "$identity")
 if [ "$identity" != - ]; then
   codesign_args+=(--timestamp)

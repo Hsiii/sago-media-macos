@@ -1,10 +1,10 @@
 import Foundation
 import Testing
-@testable import SagoMedia
+@testable import SagoDrop
 
 @Test func rejectsOversizedSourceBeforeConversion() async throws {
     let url = FileManager.default.temporaryDirectory
-        .appending(path: "sago-media-oversized-\(UUID().uuidString).mov")
+        .appending(path: "sago-drop-oversized-\(UUID().uuidString).mov")
     defer { try? FileManager.default.removeItem(at: url) }
 
     FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -19,7 +19,7 @@ import Testing
 
 @Test func keepsSupportedSmallFilesInPlace() async throws {
     let url = FileManager.default.temporaryDirectory
-        .appending(path: "sago-media-small-\(UUID().uuidString).png")
+        .appending(path: "sago-drop-small-\(UUID().uuidString).png")
     defer { try? FileManager.default.removeItem(at: url) }
     try Data("image".utf8).write(to: url)
 

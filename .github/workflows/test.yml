@@ -13,6 +13,6 @@ jobs:
       - run: swift build
       - run: scripts/build-app
         env:
-          SAGO_MEDIA_CODESIGN_IDENTITY: "-"
-      - run: codesign --verify --deep --strict ".build/Sago Media.app"
-      - run: plutil -lint ".build/Sago Media.app/Contents/Info.plist"
+          SAGO_DROP_CODESIGN_IDENTITY: "-"
+      - run: codesign --verify --deep --strict ".build/Sago Drop.app"
+      - run: plutil -lint ".build/Sago Drop.app/Contents/Info.plist"
