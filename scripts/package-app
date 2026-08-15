@@ -34,7 +34,7 @@ cask "sago-media" do
 
   url "https://github.com/Hsiii/sago-media-macos/releases/download/v#{version}/Sago-Media-#{version}.zip"
   name "Sago Media"
-  desc "Upload files from the macOS menu bar"
+  desc "Upload files from the menu bar"
   homepage "https://github.com/Hsiii/sago-media-macos"
 
   depends_on macos: :sonoma
