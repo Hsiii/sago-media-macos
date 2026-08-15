@@ -33,7 +33,7 @@ struct UploadResult: Identifiable, Decodable {
 @MainActor
 final class UploadModel: ObservableObject {
     @Published var isUploading = false
-    @Published var message = "Links copy automatically after upload"
+    @Published var message = ""
     @Published var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     private let api = MediaAPI()
@@ -239,10 +239,12 @@ struct SharePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(model.message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !model.message.isEmpty {
+                Text(model.message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             uploadActions
 
