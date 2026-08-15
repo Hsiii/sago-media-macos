@@ -36,7 +36,9 @@ enum MenuBarState: Equatable {
 @MainActor
 final class MenuBarController: NSObject, ObservableObject {
     @Published private(set) var displayedState = MenuBarState.idle
-    @Published private(set) var effectTrigger = 0
+    @Published private(set) var targetedEffectTrigger = 0
+    @Published private(set) var successEffectTrigger = 0
+    @Published private(set) var failureEffectTrigger = 0
 
     private let model: UploadModel
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -76,7 +78,14 @@ final class MenuBarController: NSObject, ObservableObject {
     private func setActivityState(_ state: MenuBarState) {
         resetTask?.cancel()
         activityState = state
-        effectTrigger += 1
+        switch state {
+        case .success:
+            successEffectTrigger += 1
+        case .failure:
+            failureEffectTrigger += 1
+        default:
+            break
+        }
         if !isDropTargeted { display(state) }
 
         guard state == .success else { return }
@@ -104,7 +113,7 @@ final class MenuBarController: NSObject, ObservableObject {
     fileprivate func setDropTargeted(_ targeted: Bool) {
         guard targeted != isDropTargeted else { return }
         isDropTargeted = targeted
-        effectTrigger += 1
+        if targeted { targetedEffectTrigger += 1 }
         display(targeted ? .targeted : activityState)
         statusItem.button?.highlight(targeted || isMenuPresented)
     }
@@ -254,10 +263,37 @@ private final class StatusItemDropView: NSView {
 
 private struct MenuBarIcon: View {
     @ObservedObject var controller: MenuBarController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if #available(macOS 15.0, *) {
+            if #available(macOS 26.0, *) {
+                currentIcon
+                    .contentTransition(.symbolEffect(.automatic))
+                    .symbolEffect(
+                        .wiggle.up.byLayer,
+                        value: controller.targetedEffectTrigger
+                    )
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: controller.displayedState == .converting
+                    )
+                    .symbolEffect(
+                        .breathe.byLayer,
+                        options: .repeating,
+                        isActive: controller.displayedState == .uploading
+                    )
+                    .symbolEffect(
+                        .bounce.up.byLayer,
+                        value: controller.successEffectTrigger
+                    )
+                    .symbolEffect(
+                        .wiggle.byLayer,
+                        options: .repeat(2),
+                        value: controller.failureEffectTrigger
+                    )
+            } else if #available(macOS 15.0, *) {
                 modernIcon
             } else {
                 legacyIcon
@@ -265,55 +301,70 @@ private struct MenuBarIcon: View {
         }
         .font(.system(size: 14, weight: .regular))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentTransition(.symbolEffect(.replace))
+        .symbolEffectsRemoved(reduceMotion)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controller.displayedState)
         .accessibilityLabel(controller.displayedState.accessibilityLabel)
         .allowsHitTesting(false)
     }
 
-    @available(macOS 15.0, *)
-    @ViewBuilder
-    private var modernIcon: some View {
-        switch controller.displayedState {
-        case .idle:
-            Image(systemName: MenuBarState.idle.symbolName)
-        case .targeted:
-            Image(systemName: MenuBarState.targeted.symbolName)
-                .symbolEffect(.wiggle.up.byLayer, options: .repeating)
-        case .converting:
-            Image(systemName: MenuBarState.converting.symbolName)
-                .symbolEffect(.rotate.counterClockwise.byLayer, options: .repeating)
-        case .uploading:
-            Image(systemName: MenuBarState.uploading.symbolName)
-                .symbolEffect(.breathe.pulse.byLayer, options: .repeating)
-        case .success:
-            Image(systemName: MenuBarState.success.symbolName)
-                .symbolEffect(.bounce.up.byLayer, value: controller.effectTrigger)
-        case .failure:
-            Image(systemName: MenuBarState.failure.symbolName)
-                .symbolEffect(.wiggle.byLayer, options: .repeat(2), value: controller.effectTrigger)
-        }
+    private var currentIcon: Image {
+        Image(systemName: controller.displayedState.symbolName)
     }
 
-    @ViewBuilder
+    @available(macOS 15.0, *)
+    private var modernIcon: some View {
+        currentIcon
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(
+                .wiggle.up.byLayer,
+                value: controller.targetedEffectTrigger
+            )
+            .symbolEffect(
+                .rotate,
+                options: .repeating,
+                isActive: controller.displayedState == .converting
+            )
+            .symbolEffect(
+                .breathe.byLayer,
+                options: .repeating,
+                isActive: controller.displayedState == .uploading
+            )
+            .symbolEffect(
+                .bounce.up.byLayer,
+                value: controller.successEffectTrigger
+            )
+            .symbolEffect(
+                .wiggle.byLayer,
+                options: .repeat(2),
+                value: controller.failureEffectTrigger
+            )
+    }
+
     private var legacyIcon: some View {
-        switch controller.displayedState {
-        case .idle:
-            Image(systemName: MenuBarState.idle.symbolName)
-        case .targeted:
-            Image(systemName: MenuBarState.targeted.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .converting:
-            Image(systemName: MenuBarState.converting.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .uploading:
-            Image(systemName: MenuBarState.uploading.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .success:
-            Image(systemName: MenuBarState.success.symbolName)
-                .symbolEffect(.bounce.up.byLayer, value: controller.effectTrigger)
-        case .failure:
-            Image(systemName: MenuBarState.failure.symbolName)
-                .symbolEffect(.pulse, value: controller.effectTrigger)
-        }
+        currentIcon
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(
+                .pulse,
+                value: controller.targetedEffectTrigger
+            )
+            .symbolEffect(
+                .pulse,
+                options: .repeating,
+                isActive: controller.displayedState == .converting
+            )
+            .symbolEffect(
+                .variableColor.iterative.reversing,
+                options: .repeating,
+                isActive: controller.displayedState == .uploading
+            )
+            .symbolEffect(
+                .bounce.up.byLayer,
+                value: controller.successEffectTrigger
+            )
+            .symbolEffect(
+                .pulse,
+                options: .repeat(2),
+                value: controller.failureEffectTrigger
+            )
     }
 }
