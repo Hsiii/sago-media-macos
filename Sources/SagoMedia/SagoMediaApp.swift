@@ -239,10 +239,10 @@ struct SharePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sago Media").font(.headline)
-                Text(model.message).font(.subheadline).foregroundStyle(.secondary)
-            }
+            Text(model.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             uploadActions
 
@@ -280,40 +280,23 @@ struct SharePanel: View {
     }
 
     private var uploadActions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "square.and.arrow.up")
-                    .font(.system(size: 20, weight: .medium))
-                    .symbolEffect(.pulse, isActive: model.isUploading)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.isUploading ? "Uploading" : "Upload files").fontWeight(.semibold)
-                    Text("Paste files copied from Finder, or choose them.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Button(action: model.pasteFiles) {
-                    Label("Paste Files", systemImage: "doc.on.clipboard")
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                }
-                .buttonStyle(.bordered)
+        HStack(spacing: 8) {
+            Button("Paste", action: model.pasteFiles)
+                .buttonStyle(.borderless)
+                .frame(minHeight: 40)
                 .keyboardShortcut("v", modifiers: .command)
 
-                Button(action: model.chooseFiles) {
-                    Label("Choose Files…", systemImage: "folder")
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                }
-                .buttonStyle(.borderedProminent)
+            Text("or")
+                .foregroundStyle(.secondary)
+
+            Button("Choose Files…", action: model.chooseFiles)
+                .buttonStyle(.link)
+                .frame(minHeight: 40)
                 .keyboardShortcut("o", modifiers: .command)
-            }
-            .disabled(model.isUploading)
+
+            Spacer()
         }
-        .padding(12)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        .frame(minHeight: 40)
+        .disabled(model.isUploading)
     }
 }
