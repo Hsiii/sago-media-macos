@@ -154,8 +154,11 @@ final class MenuBarController: NSObject, ObservableObject {
         }
 
         menu.addItem(.separator())
-        menu.addItem(actionItem("Sign In", action: #selector(signIn), enabled: !model.isUploading))
-        menu.addItem(actionItem("Access Requests…", action: #selector(openAccessRequests)))
+        if model.isSignedIn {
+            menu.addItem(actionItem("Sign Out", action: #selector(signOut), enabled: !model.isUploading))
+        } else {
+            menu.addItem(actionItem("Sign In", action: #selector(signIn), enabled: !model.isUploading))
+        }
         menu.addItem(.separator())
         menu.addItem(actionItem("Quit Sago Media", action: #selector(quit)))
     }
@@ -186,8 +189,8 @@ final class MenuBarController: NSObject, ObservableObject {
         model.login()
     }
 
-    @objc private func openAccessRequests() {
-        NSWorkspace.shared.open(URL(string: "https://media.hsichen.dev/admin")!)
+    @objc private func signOut() {
+        model.logout()
     }
 
     @objc private func quit() {
