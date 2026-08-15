@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+app="$root/.build/Sago Media.app"
+output_dir="$root/dist"
+archive="$output_dir/Sago-Media-0.1.0.zip"
+
+"$root/scripts/build-app"
+mkdir -p "$output_dir"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+
+if [ -n "${SAGO_MEDIA_NOTARY_PROFILE:-}" ]; then
+  xcrun notarytool submit "$archive" --keychain-profile "$SAGO_MEDIA_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$app"
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+fi
+
+printf '%s\n' "$archive"

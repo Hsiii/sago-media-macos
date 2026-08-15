@@ -16,6 +16,8 @@ printf '%s\n' \
   '<key>CFBundleName</key><string>Sago Media</string>' \
   '<key>CFBundlePackageType</key><string>APPL</string>' \
   '<key>CFBundleShortVersionString</key><string>0.1.0</string>' \
+  '<key>CFBundleVersion</key><string>1</string>' \
+  '<key>NSHumanReadableCopyright</key><string>Copyright © 2026 Hsi Chen</string>' \
   '<key>LSMinimumSystemVersion</key><string>14.0</string>' \
   '<key>LSUIElement</key><true/>' \
   '</dict></plist>' \
@@ -23,5 +25,9 @@ printf '%s\n' \
 
 printf '%s\n' "$bundle"
 
-identity="${SAGO_MEDIA_CODESIGN_IDENTITY:--}"
-codesign --force --deep --options runtime --sign "$identity" "$bundle"
+identity="${SAGO_MEDIA_CODESIGN_IDENTITY:-Developer ID Application: Hsi Chen (D925G8G7CS)}"
+codesign_args=(--force --deep --options runtime --sign "$identity")
+if [ "$identity" != - ]; then
+  codesign_args+=(--timestamp)
+fi
+codesign "${codesign_args[@]}" "$bundle"
