@@ -12,9 +12,9 @@ scripts/build-app
 open ".build/Sago Media.app"
 ```
 
-Choose **Sign in** once and approve the device in the browser. Drop files onto
-the menu-bar icon or popover drop target; successful uploads copy their public
-URL to the clipboard.
+Choose **Sign in** once and approve the device in the browser. Copy supported
+files in Finder and choose **Paste Files**, or use **Choose Files…** to open the
+standard file picker. Successful uploads copy their public URL to the clipboard.
 
 ## Distribution
 
