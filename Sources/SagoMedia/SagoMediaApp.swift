@@ -33,7 +33,7 @@ final class UploadModel: ObservableObject {
     @Published var message = "Links copy automatically after upload"
     @Published var recent: [UploadResult] = []
     private let api = MediaAPI()
-    private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mp4", "png", "webm", "webp"])
+    private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
 
     func chooseFiles() {
         guard !isUploading else { return }
@@ -41,7 +41,7 @@ final class UploadModel: ObservableObject {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = supportedExtensions.compactMap { UTType(filenameExtension: $0) }
-        panel.message = "Choose images or web-ready videos to upload"
+        panel.message = "Choose images or videos to upload"
         panel.prompt = "Upload"
         if panel.runModal() == .OK { upload(panel.urls) }
     }
@@ -63,7 +63,7 @@ final class UploadModel: ObservableObject {
         let urls = urls.filter { $0.isFileURL && supportedExtensions.contains($0.pathExtension.lowercased()) }
         guard !isUploading else { return }
         guard !urls.isEmpty else {
-            message = "Choose PNG, JPEG, GIF, WebP, MP4, or WebM files"
+            message = "Choose PNG, JPEG, GIF, WebP, MOV, MP4, or WebM files"
             NSSound.beep()
             return
         }
@@ -72,7 +72,13 @@ final class UploadModel: ObservableObject {
         Task {
             for url in urls {
                 do {
-                    let result = try await api.upload(url)
+                    message = url.pathExtension.lowercased() == "mov"
+                        ? "Preparing \(url.lastPathComponent)…"
+                        : "Uploading \(url.lastPathComponent)…"
+                    let prepared = try await MediaPreparation.prepare(url)
+                    defer { prepared.cleanUp() }
+                    if prepared.isTemporary { message = "Uploading converted MP4…" }
+                    let result = try await api.upload(prepared.url)
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
@@ -173,12 +179,16 @@ struct MediaAPI {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue(fileURL.lastPathComponent, forHTTPHeaderField: "X-Media-Filename")
-        request.httpBody = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-        return try await send(request, as: UploadResult.self)
+        let (data, response) = try await session.upload(for: request, fromFile: fileURL)
+        return try decode(data, response: response, as: UploadResult.self)
     }
 
     private func send<Value: Decodable>(_ request: URLRequest, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) async throws -> Value {
         let (data, response) = try await session.data(for: request)
+        return try decode(data, response: response, as: type, acceptedStatuses: acceptedStatuses)
+    }
+
+    private func decode<Value: Decodable>(_ data: Data, response: URLResponse, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) throws -> Value {
         guard let http = response as? HTTPURLResponse, acceptedStatuses.contains(http.statusCode) else {
             let detail = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw MediaError.message(detail?.isEmpty == false ? detail! : "Sago Media request failed")

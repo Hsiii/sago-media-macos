@@ -1,0 +1,30 @@
+import Foundation
+import Testing
+@testable import SagoMedia
+
+@Test func rejectsOversizedSourceBeforeConversion() async throws {
+    let url = FileManager.default.temporaryDirectory
+        .appending(path: "sago-media-oversized-\(UUID().uuidString).mov")
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    FileManager.default.createFile(atPath: url.path, contents: nil)
+    let handle = try FileHandle(forWritingTo: url)
+    try handle.truncate(atOffset: UInt64(MediaPreparation.maximumSourceBytes + 1))
+    try handle.close()
+
+    await #expect(throws: MediaError.self) {
+        try await MediaPreparation.prepare(url)
+    }
+}
+
+@Test func keepsSupportedSmallFilesInPlace() async throws {
+    let url = FileManager.default.temporaryDirectory
+        .appending(path: "sago-media-small-\(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try Data("image".utf8).write(to: url)
+
+    let prepared = try await MediaPreparation.prepare(url)
+
+    #expect(prepared.url == url)
+    #expect(!prepared.isTemporary)
+}

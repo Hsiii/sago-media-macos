@@ -5,5 +5,8 @@ let package = Package(
     name: "SagoMedia",
     platforms: [.macOS(.v14)],
     products: [.executable(name: "SagoMedia", targets: ["SagoMedia"])],
-    targets: [.executableTarget(name: "SagoMedia")]
+    targets: [
+        .executableTarget(name: "SagoMedia"),
+        .testTarget(name: "SagoMediaTests", dependencies: ["SagoMedia"]),
+    ]
 )
