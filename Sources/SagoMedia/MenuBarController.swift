@@ -36,7 +36,10 @@ enum MenuBarState: Equatable {
 @MainActor
 final class MenuBarController: NSObject, ObservableObject {
     @Published private(set) var displayedState = MenuBarState.idle
-    @Published private(set) var effectTrigger = 0
+    @Published private(set) var uploadProgress: Double?
+    @Published private(set) var targetedEffectTrigger = 0
+    @Published private(set) var successEffectTrigger = 0
+    @Published private(set) var failureEffectTrigger = 0
 
     private let model: UploadModel
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -45,6 +48,9 @@ final class MenuBarController: NSObject, ObservableObject {
     private var isDropTargeted = false
     private var isMenuPresented = false
     private var resetTask: Task<Void, Never>?
+    private var progressTailTask: Task<Void, Never>?
+    private var uploadPercentage: Int?
+    private var isFinishingUpload = false
 
     init(model: UploadModel) {
         self.model = model
@@ -53,6 +59,9 @@ final class MenuBarController: NSObject, ObservableObject {
         configureStatusItem()
         model.onMenuBarStateChange = { [weak self] state in
             self?.setActivityState(state)
+        }
+        model.onUploadProgressChange = { [weak self] update in
+            self?.updateUploadProgress(update)
         }
     }
 
@@ -76,7 +85,17 @@ final class MenuBarController: NSObject, ObservableObject {
     private func setActivityState(_ state: MenuBarState) {
         resetTask?.cancel()
         activityState = state
-        effectTrigger += 1
+#if DEBUG
+        smokeLog("state=\(String(describing: state))")
+#endif
+        switch state {
+        case .success:
+            successEffectTrigger += 1
+        case .failure:
+            failureEffectTrigger += 1
+        default:
+            break
+        }
         if !isDropTargeted { display(state) }
 
         guard state == .success else { return }
@@ -93,8 +112,53 @@ final class MenuBarController: NSObject, ObservableObject {
     }
 
     private func updateAccessibility() {
-        statusItem.button?.toolTip = displayedState.accessibilityLabel
-        statusItem.button?.setAccessibilityLabel(displayedState.accessibilityLabel)
+        let label: String
+        if displayedState == .uploading, isFinishingUpload {
+            label = "Sago Media, finishing upload"
+        } else if displayedState == .uploading, let uploadPercentage {
+            label = "\(displayedState.accessibilityLabel), \(uploadPercentage) percent"
+        } else {
+            label = displayedState.accessibilityLabel
+        }
+        statusItem.button?.toolTip = label
+        statusItem.button?.setAccessibilityLabel(label)
+    }
+
+    private func updateUploadProgress(_ update: UploadProgressUpdate?) {
+        progressTailTask?.cancel()
+
+        switch update {
+        case .transferring(let progress):
+            let clampedProgress = min(1, max(0, progress))
+            uploadPercentage = Int((clampedProgress * 100).rounded())
+            isFinishingUpload = false
+            uploadProgress = clampedProgress == 1 ? 1 : 0.06 + (clampedProgress * 0.86)
+        case .processing:
+            uploadPercentage = nil
+            isFinishingUpload = true
+            uploadProgress = max(uploadProgress ?? 0, 0.92)
+            progressTailTask = Task { [weak self] in
+                for target in [0.95, 0.97, 0.98] {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled, self?.isFinishingUpload == true else { return }
+                    self?.uploadProgress = target
+#if DEBUG
+                    smokeLog("tail displayed=\(target)")
+#endif
+                }
+            }
+        case nil:
+            uploadPercentage = nil
+            isFinishingUpload = false
+            uploadProgress = nil
+        }
+
+#if DEBUG
+        let displayedProgress = uploadProgress.map { String($0) } ?? "none"
+        let actualProgress = uploadPercentage.map { String($0) } ?? "none"
+        smokeLog("progress displayed=\(displayedProgress) actual=\(actualProgress) finishing=\(isFinishingUpload)")
+#endif
+        updateAccessibility()
     }
 
     fileprivate func acceptsDrop(_ urls: [URL]) -> Bool {
@@ -104,7 +168,7 @@ final class MenuBarController: NSObject, ObservableObject {
     fileprivate func setDropTargeted(_ targeted: Bool) {
         guard targeted != isDropTargeted else { return }
         isDropTargeted = targeted
-        effectTrigger += 1
+        if targeted { targetedEffectTrigger += 1 }
         display(targeted ? .targeted : activityState)
         statusItem.button?.highlight(targeted || isMenuPresented)
     }
@@ -254,10 +318,37 @@ private final class StatusItemDropView: NSView {
 
 private struct MenuBarIcon: View {
     @ObservedObject var controller: MenuBarController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if #available(macOS 15.0, *) {
+            if #available(macOS 26.0, *) {
+                iconContent
+                    .contentTransition(.symbolEffect(.automatic))
+                    .symbolEffect(
+                        .wiggle.up.byLayer,
+                        value: controller.targetedEffectTrigger
+                    )
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeating,
+                        isActive: controller.displayedState == .converting
+                    )
+                    .symbolEffect(
+                        .breathe.byLayer,
+                        options: .repeating,
+                        isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
+                    )
+                    .symbolEffect(
+                        .bounce.up.byLayer,
+                        value: controller.successEffectTrigger
+                    )
+                    .symbolEffect(
+                        .wiggle.byLayer,
+                        options: .repeat(2),
+                        value: controller.failureEffectTrigger
+                    )
+            } else if #available(macOS 15.0, *) {
                 modernIcon
             } else {
                 legacyIcon
@@ -265,55 +356,100 @@ private struct MenuBarIcon: View {
         }
         .font(.system(size: 14, weight: .regular))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentTransition(.symbolEffect(.replace))
+        .symbolEffectsRemoved(reduceMotion)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controller.displayedState)
         .accessibilityLabel(controller.displayedState.accessibilityLabel)
         .allowsHitTesting(false)
     }
 
-    @available(macOS 15.0, *)
-    @ViewBuilder
-    private var modernIcon: some View {
-        switch controller.displayedState {
-        case .idle:
-            Image(systemName: MenuBarState.idle.symbolName)
-        case .targeted:
-            Image(systemName: MenuBarState.targeted.symbolName)
-                .symbolEffect(.wiggle.up.byLayer, options: .repeating)
-        case .converting:
-            Image(systemName: MenuBarState.converting.symbolName)
-                .symbolEffect(.rotate.counterClockwise.byLayer, options: .repeating)
-        case .uploading:
-            Image(systemName: MenuBarState.uploading.symbolName)
-                .symbolEffect(.breathe.pulse.byLayer, options: .repeating)
-        case .success:
-            Image(systemName: MenuBarState.success.symbolName)
-                .symbolEffect(.bounce.up.byLayer, value: controller.effectTrigger)
-        case .failure:
-            Image(systemName: MenuBarState.failure.symbolName)
-                .symbolEffect(.wiggle.byLayer, options: .repeat(2), value: controller.effectTrigger)
-        }
+    private var currentIcon: Image {
+        Image(systemName: controller.displayedState.symbolName)
     }
 
     @ViewBuilder
-    private var legacyIcon: some View {
-        switch controller.displayedState {
-        case .idle:
-            Image(systemName: MenuBarState.idle.symbolName)
-        case .targeted:
-            Image(systemName: MenuBarState.targeted.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .converting:
-            Image(systemName: MenuBarState.converting.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .uploading:
-            Image(systemName: MenuBarState.uploading.symbolName)
-                .symbolEffect(.pulse, options: .repeating)
-        case .success:
-            Image(systemName: MenuBarState.success.symbolName)
-                .symbolEffect(.bounce.up.byLayer, value: controller.effectTrigger)
-        case .failure:
-            Image(systemName: MenuBarState.failure.symbolName)
-                .symbolEffect(.pulse, value: controller.effectTrigger)
+    private var iconContent: some View {
+        if controller.displayedState == .uploading, let progress = controller.uploadProgress {
+            UploadProgressIcon(progress: progress)
+        } else {
+            currentIcon
         }
+    }
+
+    @available(macOS 15.0, *)
+    private var modernIcon: some View {
+        iconContent
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(
+                .wiggle.up.byLayer,
+                value: controller.targetedEffectTrigger
+            )
+            .symbolEffect(
+                .rotate,
+                options: .repeating,
+                isActive: controller.displayedState == .converting
+            )
+            .symbolEffect(
+                .breathe.byLayer,
+                options: .repeating,
+                isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
+            )
+            .symbolEffect(
+                .bounce.up.byLayer,
+                value: controller.successEffectTrigger
+            )
+            .symbolEffect(
+                .wiggle.byLayer,
+                options: .repeat(2),
+                value: controller.failureEffectTrigger
+            )
+    }
+
+    private var legacyIcon: some View {
+        iconContent
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(
+                .pulse,
+                value: controller.targetedEffectTrigger
+            )
+            .symbolEffect(
+                .pulse,
+                options: .repeating,
+                isActive: controller.displayedState == .converting
+            )
+            .symbolEffect(
+                .variableColor.iterative.reversing,
+                options: .repeating,
+                isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
+            )
+            .symbolEffect(
+                .bounce.up.byLayer,
+                value: controller.successEffectTrigger
+            )
+            .symbolEffect(
+                .pulse,
+                options: .repeat(2),
+                value: controller.failureEffectTrigger
+            )
+    }
+}
+
+private struct UploadProgressIcon: View {
+    let progress: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.primary.opacity(0.24), lineWidth: 1.5)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(.primary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: "arrow.up")
+                .font(.system(size: 8, weight: .semibold))
+        }
+        .frame(width: 14, height: 14)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: progress)
+        .accessibilityHidden(true)
     }
 }

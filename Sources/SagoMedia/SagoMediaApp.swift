@@ -3,6 +3,13 @@ import Security
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if DEBUG
+func smokeLog(_ message: String) {
+    guard ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_LOG"] == "1" else { return }
+    FileHandle.standardError.write(Data("SMOKE \(message)\n".utf8))
+}
+#endif
+
 @main
 struct SagoMediaApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: SagoMediaAppDelegate
@@ -17,7 +24,20 @@ final class SagoMediaAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        menuBarController = MenuBarController(model: UploadModel())
+        let model = UploadModel()
+        menuBarController = MenuBarController(model: model)
+#if DEBUG
+        if let testFile = ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_FILE"] {
+            model.onSmokeTestComplete = { succeeded in
+                smokeLog("complete success=\(succeeded)")
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(250))
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+            Task { @MainActor in model.upload([URL(fileURLWithPath: testFile)]) }
+        }
+#endif
     }
 }
 
@@ -30,6 +50,11 @@ struct UploadResult: Identifiable, Decodable {
     enum CodingKeys: String, CodingKey { case url, markdown, previewUrl }
 }
 
+enum UploadProgressUpdate {
+    case transferring(Double)
+    case processing
+}
+
 @MainActor
 final class UploadModel {
     var isUploading = false
@@ -37,8 +62,13 @@ final class UploadModel {
     var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     var isSignedIn: Bool { (try? Keychain.load()) != nil }
+    var onUploadProgressChange: ((UploadProgressUpdate?) -> Void)?
+#if DEBUG
+    var onSmokeTestComplete: ((Bool) -> Void)?
+#endif
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
+    private var processingStartedAt: Date?
 
     func accepts(_ urls: [URL]) -> Bool {
         !isUploading && !urls.isEmpty && urls.allSatisfy {
@@ -91,18 +121,48 @@ final class UploadModel {
                     defer { prepared.cleanUp() }
                     if prepared.isTemporary { message = "Uploading converted MP4…" }
                     onMenuBarStateChange?(.uploading)
-                    let result = try await api.upload(prepared.url)
+                    processingStartedAt = nil
+                    onUploadProgressChange?(.transferring(0))
+                    let result = try await api.upload(prepared.url) { [weak self] progress in
+                        guard let self else { return }
+                        let percentage = Int((progress * 100).rounded())
+                        message = progress < 1
+                            ? "Uploading \(url.lastPathComponent)… \(percentage)%"
+                            : "Finishing \(url.lastPathComponent)…"
+                        if progress < 1 {
+                            onUploadProgressChange?(.transferring(progress))
+                        } else {
+                            processingStartedAt = processingStartedAt ?? Date()
+                            onUploadProgressChange?(.processing)
+                        }
+                    }
+                    let processingStart = processingStartedAt ?? Date()
+                    processingStartedAt = processingStart
+                    onUploadProgressChange?(.processing)
+                    let remainingFeedback = 0.45 - Date().timeIntervalSince(processingStart)
+                    if remainingFeedback > 0 {
+                        try? await Task.sleep(for: .seconds(remainingFeedback))
+                    }
+                    onUploadProgressChange?(.transferring(1))
+                    try? await Task.sleep(for: .milliseconds(150))
+                    onUploadProgressChange?(nil)
+                    processingStartedAt = nil
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
                 } catch {
                     failed = true
+                    processingStartedAt = nil
+                    onUploadProgressChange?(nil)
                     message = error.localizedDescription
                     NSSound.beep()
                 }
             }
             isUploading = false
             onMenuBarStateChange?(failed ? .failure : .success)
+#if DEBUG
+            onSmokeTestComplete?(!failed)
+#endif
         }
     }
 
@@ -198,15 +258,25 @@ struct MediaAPI {
         throw MediaError.message("The access request expired")
     }
 
-    func upload(_ fileURL: URL) async throws -> UploadResult {
-        guard let token = try Keychain.load() else { throw MediaError.message("Sign in before uploading") }
+    func upload(_ fileURL: URL, onProgress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> UploadResult {
+        guard let token = try uploadToken() else { throw MediaError.message("Sign in before uploading") }
         var request = URLRequest(url: baseURL.appending(path: "/v1/uploads"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue(fileURL.lastPathComponent, forHTTPHeaderField: "X-Media-Filename")
-        let (data, response) = try await session.upload(for: request, fromFile: fileURL)
+        let delegate = UploadProgressDelegate(onProgress: onProgress)
+        let (data, response) = try await session.upload(for: request, fromFile: fileURL, delegate: delegate)
         return try decode(data, response: response, as: UploadResult.self)
+    }
+
+    private func uploadToken() throws -> String? {
+#if DEBUG
+        if let smokeToken = ProcessInfo.processInfo.environment["SAGO_MEDIA_SMOKE_TOKEN"] {
+            return smokeToken
+        }
+#endif
+        return try Keychain.load()
     }
 
     private func send<Value: Decodable>(_ request: URLRequest, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) async throws -> Value {
@@ -221,6 +291,26 @@ struct MediaAPI {
         }
         do { return try JSONDecoder().decode(type, from: data) }
         catch { throw MediaError.message("Sago Media returned an invalid response") }
+    }
+}
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @MainActor @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @MainActor @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let progress = min(1, max(0, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
+        Task { @MainActor [onProgress] in onProgress(progress) }
     }
 }
 

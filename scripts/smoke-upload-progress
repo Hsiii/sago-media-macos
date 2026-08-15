@@ -1,0 +1,102 @@
+#!/usr/bin/env bun
+
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const smokeDirectory = await mkdtemp(join(tmpdir(), "sago-media-upload-smoke-"));
+const successFile = join(smokeDirectory, "progress-success.mp4");
+const failureFile = join(smokeDirectory, "progress-fail.mp4");
+
+await Bun.write(successFile, new Uint8Array(12 * 1024 * 1024));
+await Bun.write(failureFile, new Uint8Array(6 * 1024 * 1024));
+
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(request) {
+    const filename = request.headers.get("x-media-filename") ?? "upload.bin";
+    const reader = request.body?.getReader();
+
+    if (reader) {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+        await Bun.sleep(30);
+      }
+    }
+
+    await Bun.sleep(1200);
+    if (filename.includes("fail")) {
+      return new Response("Mock upload failed", { status: 500 });
+    }
+
+    const url = `${server.url}files/${encodeURIComponent(filename)}`;
+    return Response.json({ url, markdown: `[${filename}](${url})`, previewUrl: null });
+  },
+});
+
+async function run(command) {
+  const process = Bun.spawn(command, {
+    cwd: root,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await process.exited;
+  if (exitCode !== 0) throw new Error(`${command.join(" ")} exited with ${exitCode}`);
+}
+
+async function runScenario(name, file, expectedMarkers) {
+  const process = Bun.spawn([join(root, ".build/debug/SagoMedia")], {
+    cwd: root,
+    env: {
+      ...Bun.env,
+      MEDIA_URL: server.url.toString(),
+      SAGO_MEDIA_SMOKE_FILE: file,
+      SAGO_MEDIA_SMOKE_LOG: "1",
+      SAGO_MEDIA_SMOKE_TOKEN: "local-smoke-token",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const timeout = setTimeout(() => process.kill(), 20_000);
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+    process.exited,
+  ]);
+  clearTimeout(timeout);
+
+  const output = `${stdout}\n${stderr}`;
+  if (exitCode !== 0) throw new Error(`${name} exited with ${exitCode}\n${output}`);
+  for (const marker of expectedMarkers) {
+    if (!output.includes(marker)) throw new Error(`${name} missed "${marker}"\n${output}`);
+  }
+
+  console.log(`PASS ${name}`);
+}
+
+try {
+  await run(["swift", "build"]);
+  await runScenario("successful upload progress", successFile, [
+    "SMOKE state=uploading",
+    "SMOKE progress displayed=0.06 actual=0 finishing=false",
+    "actual=none finishing=true",
+    "SMOKE tail displayed=0.95",
+    "SMOKE progress displayed=1.0 actual=100 finishing=false",
+    "SMOKE state=success",
+    "SMOKE complete success=true",
+  ]);
+  await runScenario("failed upload progress", failureFile, [
+    "SMOKE state=uploading",
+    "actual=none finishing=true",
+    "SMOKE state=failure",
+    "SMOKE complete success=false",
+  ]);
+} finally {
+  server.stop(true);
+  await rm(smokeDirectory, { recursive: true, force: true });
+}
