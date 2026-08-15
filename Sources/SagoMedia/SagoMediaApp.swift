@@ -30,6 +30,11 @@ struct UploadResult: Identifiable, Decodable {
     enum CodingKeys: String, CodingKey { case url, markdown, previewUrl }
 }
 
+enum UploadProgressUpdate {
+    case transferring(Double)
+    case processing
+}
+
 @MainActor
 final class UploadModel {
     var isUploading = false
@@ -37,6 +42,7 @@ final class UploadModel {
     var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     var isSignedIn: Bool { (try? Keychain.load()) != nil }
+    var onUploadProgressChange: ((UploadProgressUpdate?) -> Void)?
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
 
@@ -91,12 +97,24 @@ final class UploadModel {
                     defer { prepared.cleanUp() }
                     if prepared.isTemporary { message = "Uploading converted MP4…" }
                     onMenuBarStateChange?(.uploading)
-                    let result = try await api.upload(prepared.url)
+                    onUploadProgressChange?(.transferring(0))
+                    let result = try await api.upload(prepared.url) { [weak self] progress in
+                        guard let self else { return }
+                        let percentage = Int((progress * 100).rounded())
+                        message = progress < 1
+                            ? "Uploading \(url.lastPathComponent)… \(percentage)%"
+                            : "Finishing \(url.lastPathComponent)…"
+                        onUploadProgressChange?(progress < 1 ? .transferring(progress) : .processing)
+                    }
+                    onUploadProgressChange?(.transferring(1))
+                    try? await Task.sleep(for: .milliseconds(150))
+                    onUploadProgressChange?(nil)
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
                 } catch {
                     failed = true
+                    onUploadProgressChange?(nil)
                     message = error.localizedDescription
                     NSSound.beep()
                 }
@@ -198,14 +216,15 @@ struct MediaAPI {
         throw MediaError.message("The access request expired")
     }
 
-    func upload(_ fileURL: URL) async throws -> UploadResult {
+    func upload(_ fileURL: URL, onProgress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> UploadResult {
         guard let token = try Keychain.load() else { throw MediaError.message("Sign in before uploading") }
         var request = URLRequest(url: baseURL.appending(path: "/v1/uploads"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue(fileURL.lastPathComponent, forHTTPHeaderField: "X-Media-Filename")
-        let (data, response) = try await session.upload(for: request, fromFile: fileURL)
+        let delegate = UploadProgressDelegate(onProgress: onProgress)
+        let (data, response) = try await session.upload(for: request, fromFile: fileURL, delegate: delegate)
         return try decode(data, response: response, as: UploadResult.self)
     }
 
@@ -221,6 +240,26 @@ struct MediaAPI {
         }
         do { return try JSONDecoder().decode(type, from: data) }
         catch { throw MediaError.message("Sago Media returned an invalid response") }
+    }
+}
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @MainActor @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @MainActor @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let progress = min(1, max(0, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
+        Task { @MainActor [onProgress] in onProgress(progress) }
     }
 }
 

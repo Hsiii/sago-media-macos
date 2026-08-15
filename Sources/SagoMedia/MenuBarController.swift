@@ -36,6 +36,7 @@ enum MenuBarState: Equatable {
 @MainActor
 final class MenuBarController: NSObject, ObservableObject {
     @Published private(set) var displayedState = MenuBarState.idle
+    @Published private(set) var uploadProgress: Double?
     @Published private(set) var targetedEffectTrigger = 0
     @Published private(set) var successEffectTrigger = 0
     @Published private(set) var failureEffectTrigger = 0
@@ -47,6 +48,9 @@ final class MenuBarController: NSObject, ObservableObject {
     private var isDropTargeted = false
     private var isMenuPresented = false
     private var resetTask: Task<Void, Never>?
+    private var progressTailTask: Task<Void, Never>?
+    private var uploadPercentage: Int?
+    private var isFinishingUpload = false
 
     init(model: UploadModel) {
         self.model = model
@@ -55,6 +59,9 @@ final class MenuBarController: NSObject, ObservableObject {
         configureStatusItem()
         model.onMenuBarStateChange = { [weak self] state in
             self?.setActivityState(state)
+        }
+        model.onUploadProgressChange = { [weak self] update in
+            self?.updateUploadProgress(update)
         }
     }
 
@@ -102,8 +109,45 @@ final class MenuBarController: NSObject, ObservableObject {
     }
 
     private func updateAccessibility() {
-        statusItem.button?.toolTip = displayedState.accessibilityLabel
-        statusItem.button?.setAccessibilityLabel(displayedState.accessibilityLabel)
+        let label: String
+        if displayedState == .uploading, isFinishingUpload {
+            label = "Sago Media, finishing upload"
+        } else if displayedState == .uploading, let uploadPercentage {
+            label = "\(displayedState.accessibilityLabel), \(uploadPercentage) percent"
+        } else {
+            label = displayedState.accessibilityLabel
+        }
+        statusItem.button?.toolTip = label
+        statusItem.button?.setAccessibilityLabel(label)
+    }
+
+    private func updateUploadProgress(_ update: UploadProgressUpdate?) {
+        progressTailTask?.cancel()
+
+        switch update {
+        case .transferring(let progress):
+            let clampedProgress = min(1, max(0, progress))
+            uploadPercentage = Int((clampedProgress * 100).rounded())
+            isFinishingUpload = false
+            uploadProgress = clampedProgress == 1 ? 1 : 0.06 + (clampedProgress * 0.86)
+        case .processing:
+            uploadPercentage = nil
+            isFinishingUpload = true
+            uploadProgress = max(uploadProgress ?? 0, 0.92)
+            progressTailTask = Task { [weak self] in
+                for target in [0.95, 0.97, 0.98] {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled, self?.isFinishingUpload == true else { return }
+                    self?.uploadProgress = target
+                }
+            }
+        case nil:
+            uploadPercentage = nil
+            isFinishingUpload = false
+            uploadProgress = nil
+        }
+
+        updateAccessibility()
     }
 
     fileprivate func acceptsDrop(_ urls: [URL]) -> Bool {
@@ -268,7 +312,7 @@ private struct MenuBarIcon: View {
     var body: some View {
         Group {
             if #available(macOS 26.0, *) {
-                currentIcon
+                iconContent
                     .contentTransition(.symbolEffect(.automatic))
                     .symbolEffect(
                         .wiggle.up.byLayer,
@@ -282,7 +326,7 @@ private struct MenuBarIcon: View {
                     .symbolEffect(
                         .breathe.byLayer,
                         options: .repeating,
-                        isActive: controller.displayedState == .uploading
+                        isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
                     )
                     .symbolEffect(
                         .bounce.up.byLayer,
@@ -311,9 +355,18 @@ private struct MenuBarIcon: View {
         Image(systemName: controller.displayedState.symbolName)
     }
 
+    @ViewBuilder
+    private var iconContent: some View {
+        if controller.displayedState == .uploading, let progress = controller.uploadProgress {
+            UploadProgressIcon(progress: progress)
+        } else {
+            currentIcon
+        }
+    }
+
     @available(macOS 15.0, *)
     private var modernIcon: some View {
-        currentIcon
+        iconContent
             .contentTransition(.symbolEffect(.replace))
             .symbolEffect(
                 .wiggle.up.byLayer,
@@ -327,7 +380,7 @@ private struct MenuBarIcon: View {
             .symbolEffect(
                 .breathe.byLayer,
                 options: .repeating,
-                isActive: controller.displayedState == .uploading
+                isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
             )
             .symbolEffect(
                 .bounce.up.byLayer,
@@ -341,7 +394,7 @@ private struct MenuBarIcon: View {
     }
 
     private var legacyIcon: some View {
-        currentIcon
+        iconContent
             .contentTransition(.symbolEffect(.replace))
             .symbolEffect(
                 .pulse,
@@ -355,7 +408,7 @@ private struct MenuBarIcon: View {
             .symbolEffect(
                 .variableColor.iterative.reversing,
                 options: .repeating,
-                isActive: controller.displayedState == .uploading
+                isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
             )
             .symbolEffect(
                 .bounce.up.byLayer,
@@ -366,5 +419,26 @@ private struct MenuBarIcon: View {
                 options: .repeat(2),
                 value: controller.failureEffectTrigger
             )
+    }
+}
+
+private struct UploadProgressIcon: View {
+    let progress: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.primary.opacity(0.24), lineWidth: 1.5)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(.primary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Image(systemName: "arrow.up")
+                .font(.system(size: 8, weight: .semibold))
+        }
+        .frame(width: 14, height: 14)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: progress)
+        .accessibilityHidden(true)
     }
 }
