@@ -31,10 +31,10 @@ struct UploadResult: Identifiable, Decodable {
 }
 
 @MainActor
-final class UploadModel: ObservableObject {
-    @Published var isUploading = false
-    @Published var message = "Links copy automatically after upload"
-    @Published var recent: [UploadResult] = []
+final class UploadModel {
+    var isUploading = false
+    var message = ""
+    var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
@@ -231,89 +231,5 @@ enum Keychain {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw MediaError.message("Could not read credentials from Keychain") }
         return token
-    }
-}
-
-struct SharePanel: View {
-    @ObservedObject var model: UploadModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sago Media").font(.headline)
-                Text(model.message).font(.subheadline).foregroundStyle(.secondary)
-            }
-
-            uploadActions
-
-            if !model.recent.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recent").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(model.recent.prefix(5)) { item in
-                        Button {
-                            model.copy(item.url)
-                            model.message = "Copied link"
-                        } label: {
-                            HStack {
-                                Image(systemName: "link")
-                                Text(URL(string: item.url)?.lastPathComponent ?? item.url).lineLimit(1)
-                                Spacer()
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 40)
-                    }
-                }
-            }
-
-            HStack {
-                Button("Sign in", action: model.login)
-                Button("Access requests") { NSWorkspace.shared.open(URL(string: "https://media.hsichen.dev/admin")!) }
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-        }
-        .padding(16)
-        .frame(width: 360)
-    }
-
-    private var uploadActions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "square.and.arrow.up")
-                    .font(.system(size: 20, weight: .medium))
-                    .symbolEffect(.pulse, isActive: model.isUploading)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.isUploading ? "Uploading" : "Upload files").fontWeight(.semibold)
-                    Text("Paste files copied from Finder, or choose them.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Button(action: model.pasteFiles) {
-                    Label("Paste Files", systemImage: "doc.on.clipboard")
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                }
-                .buttonStyle(.bordered)
-                .keyboardShortcut("v", modifiers: .command)
-
-                Button(action: model.chooseFiles) {
-                    Label("Choose Files…", systemImage: "folder")
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut("o", modifiers: .command)
-            }
-            .disabled(model.isUploading)
-        }
-        .padding(12)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
     }
 }
