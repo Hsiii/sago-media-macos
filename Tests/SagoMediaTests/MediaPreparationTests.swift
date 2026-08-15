@@ -28,3 +28,12 @@ import Testing
     #expect(prepared.url == url)
     #expect(!prepared.isTemporary)
 }
+
+@MainActor
+@Test func acceptsSupportedDroppedFilesIncludingMOV() {
+    let model = UploadModel()
+
+    #expect(model.accepts([URL(fileURLWithPath: "/tmp/recording.mov")]))
+    #expect(model.accepts([URL(fileURLWithPath: "/tmp/image.png")]))
+    #expect(!model.accepts([URL(fileURLWithPath: "/tmp/archive.zip")]))
+}

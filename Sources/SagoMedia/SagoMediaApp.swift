@@ -5,16 +5,19 @@ import UniformTypeIdentifiers
 
 @main
 struct SagoMediaApp: App {
-    @StateObject private var model = UploadModel()
+    @NSApplicationDelegateAdaptor private var appDelegate: SagoMediaAppDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            SharePanel(model: model)
-        } label: {
-            Image(systemName: model.isUploading ? "arrow.up.circle.fill" : "square.and.arrow.up")
-                .symbolEffect(.pulse, isActive: model.isUploading)
-        }
-        .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
+    }
+}
+
+@MainActor
+final class SagoMediaAppDelegate: NSObject, NSApplicationDelegate {
+    private var menuBarController: MenuBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        menuBarController = MenuBarController(model: UploadModel())
     }
 }
 
@@ -32,8 +35,15 @@ final class UploadModel: ObservableObject {
     @Published var isUploading = false
     @Published var message = "Links copy automatically after upload"
     @Published var recent: [UploadResult] = []
+    var onMenuBarStateChange: ((MenuBarState) -> Void)?
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
+
+    func accepts(_ urls: [URL]) -> Bool {
+        !isUploading && !urls.isEmpty && urls.allSatisfy {
+            $0.isFileURL && supportedExtensions.contains($0.pathExtension.lowercased())
+        }
+    }
 
     func chooseFiles() {
         guard !isUploading else { return }
@@ -70,24 +80,28 @@ final class UploadModel: ObservableObject {
         isUploading = true
         message = urls.count == 1 ? "Uploading \(urls[0].lastPathComponent)…" : "Uploading \(urls.count) files…"
         Task {
+            var failed = false
             for url in urls {
                 do {
-                    message = url.pathExtension.lowercased() == "mov"
-                        ? "Preparing \(url.lastPathComponent)…"
-                        : "Uploading \(url.lastPathComponent)…"
+                    let isMOV = url.pathExtension.lowercased() == "mov"
+                    message = isMOV ? "Preparing \(url.lastPathComponent)…" : "Uploading \(url.lastPathComponent)…"
+                    onMenuBarStateChange?(isMOV ? .converting : .uploading)
                     let prepared = try await MediaPreparation.prepare(url)
                     defer { prepared.cleanUp() }
                     if prepared.isTemporary { message = "Uploading converted MP4…" }
+                    onMenuBarStateChange?(.uploading)
                     let result = try await api.upload(prepared.url)
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
                 } catch {
+                    failed = true
                     message = error.localizedDescription
                     NSSound.beep()
                 }
             }
             isUploading = false
+            onMenuBarStateChange?(failed ? .failure : .success)
         }
     }
 

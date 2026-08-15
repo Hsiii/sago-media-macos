@@ -14,7 +14,8 @@ open ".build/Sago Media.app"
 
 Choose **Sign in** once and approve the device in the browser. Copy supported
 files in Finder and choose **Paste Files**, or use **Choose Files…** to open the
-standard file picker. Successful uploads copy their public URL to the clipboard.
+standard file picker. You can also drag supported files directly onto the
+menu-bar icon. Successful uploads copy their public URL to the clipboard.
 
 MOV files up to 500 MB are converted locally to a web-ready MP4 before upload.
 The app first tries a lossless container conversion, then compresses to fit the
