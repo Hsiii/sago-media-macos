@@ -45,6 +45,7 @@ final class UploadModel {
     var onUploadProgressChange: ((UploadProgressUpdate?) -> Void)?
     private let api = MediaAPI()
     private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
+    private var processingStartedAt: Date?
 
     func accepts(_ urls: [URL]) -> Bool {
         !isUploading && !urls.isEmpty && urls.allSatisfy {
@@ -97,6 +98,7 @@ final class UploadModel {
                     defer { prepared.cleanUp() }
                     if prepared.isTemporary { message = "Uploading converted MP4…" }
                     onMenuBarStateChange?(.uploading)
+                    processingStartedAt = nil
                     onUploadProgressChange?(.transferring(0))
                     let result = try await api.upload(prepared.url) { [weak self] progress in
                         guard let self else { return }
@@ -104,16 +106,30 @@ final class UploadModel {
                         message = progress < 1
                             ? "Uploading \(url.lastPathComponent)… \(percentage)%"
                             : "Finishing \(url.lastPathComponent)…"
-                        onUploadProgressChange?(progress < 1 ? .transferring(progress) : .processing)
+                        if progress < 1 {
+                            onUploadProgressChange?(.transferring(progress))
+                        } else {
+                            processingStartedAt = processingStartedAt ?? Date()
+                            onUploadProgressChange?(.processing)
+                        }
+                    }
+                    let processingStart = processingStartedAt ?? Date()
+                    processingStartedAt = processingStart
+                    onUploadProgressChange?(.processing)
+                    let remainingFeedback = 0.45 - Date().timeIntervalSince(processingStart)
+                    if remainingFeedback > 0 {
+                        try? await Task.sleep(for: .seconds(remainingFeedback))
                     }
                     onUploadProgressChange?(.transferring(1))
                     try? await Task.sleep(for: .milliseconds(150))
                     onUploadProgressChange?(nil)
+                    processingStartedAt = nil
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
                 } catch {
                     failed = true
+                    processingStartedAt = nil
                     onUploadProgressChange?(nil)
                     message = error.localizedDescription
                     NSSound.beep()
