@@ -22,3 +22,6 @@ printf '%s\n' \
   >"$bundle/Contents/Info.plist"
 
 printf '%s\n' "$bundle"
+
+identity="${SAGO_MEDIA_CODESIGN_IDENTITY:--}"
+codesign --force --deep --options runtime --sign "$identity" "$bundle"

@@ -1,14 +1,9 @@
 # Sago Media
 
-A native macOS menu-bar client for `media.hsichen.dev`.
+A native macOS menu-bar client for `media.hsichen.dev`. It talks directly to
+the service and stores its device credential in macOS Keychain.
 
 ## Run
-
-Authenticate once with the shared CLI:
-
-```bash
-npx sago-media auth login
-```
 
 Build and launch the menu-bar app:
 
@@ -17,4 +12,6 @@ scripts/build-app
 open ".build/Sago Media.app"
 ```
 
-Drop files onto the menu-bar icon or the popover drop target. Successful uploads copy their public URL to the clipboard. The app uses an installed `sago-media` command when available and otherwise runs the pinned `sago-media@0.1.0` client.
+Choose **Sign in** once and approve the device in the browser. Drop files onto
+the menu-bar icon or popover drop target; successful uploads copy their public
+URL to the clipboard.

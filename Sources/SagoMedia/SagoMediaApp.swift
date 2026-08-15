@@ -1,4 +1,5 @@
 import AppKit
+import Security
 import SwiftUI
 
 @main
@@ -35,6 +36,7 @@ final class UploadModel: ObservableObject {
     @Published var isDropTargeted = false
     @Published var message = "Drop a file to copy its share link"
     @Published var recent: [UploadResult] = []
+    private let api = MediaAPI()
 
     func upload(_ urls: [URL]) {
         guard !urls.isEmpty, !isUploading else { return }
@@ -43,7 +45,7 @@ final class UploadModel: ObservableObject {
         Task {
             for url in urls {
                 do {
-                    let result = try await MediaCLI.upload(url)
+                    let result = try await api.upload(url)
                     recent.insert(result, at: 0)
                     copy(result.url)
                     message = "Copied \(url.lastPathComponent)"
@@ -57,8 +59,22 @@ final class UploadModel: ObservableObject {
     }
 
     func login() {
-        MediaCLI.launchLogin()
-        message = "Complete login in your browser"
+        guard !isUploading else { return }
+        isUploading = true
+        message = "Starting secure login…"
+        Task {
+            do {
+                let device = try await api.startLogin()
+                message = "Approve code \(device.userCode) in your browser"
+                NSWorkspace.shared.open(device.verificationUri)
+                let scope = try await api.waitForApproval(device)
+                message = "Signed in with \(scope) access"
+            } catch {
+                message = error.localizedDescription
+                NSSound.beep()
+            }
+            isUploading = false
+        }
     }
 
     func copy(_ value: String) {
@@ -67,45 +83,103 @@ final class UploadModel: ObservableObject {
     }
 }
 
-enum MediaCLI {
-    static func command(arguments: [String]) -> Process {
-        let process = Process()
-        if let installed = ["/opt/homebrew/bin/sago-media", "/usr/local/bin/sago-media"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            process.executableURL = URL(fileURLWithPath: installed)
-            process.arguments = arguments
-        } else {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["npx", "--yes", "sago-media@0.1.0"] + arguments
-        }
-        return process
+struct DeviceRequest: Decodable {
+    let deviceCode: String
+    let deviceSecret: String
+    let userCode: String
+    let verificationUri: URL
+    let expiresIn: Int
+    let interval: Int
+}
+
+private struct DeviceStatus: Decodable {
+    let status: String
+    let token: String?
+    let scope: String?
+}
+
+enum MediaError: LocalizedError {
+    case message(String)
+
+    var errorDescription: String? {
+        switch self { case .message(let message): message }
+    }
+}
+
+struct MediaAPI {
+    private let baseURL: URL
+    private let session: URLSession
+
+    init(baseURL: URL = URL(string: ProcessInfo.processInfo.environment["MEDIA_URL"] ?? "https://media.hsichen.dev")!, session: URLSession = .shared) {
+        self.baseURL = baseURL
+        self.session = session
     }
 
-    static func upload(_ url: URL) async throws -> UploadResult {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = command(arguments: ["upload", url.path, "--output", "json"])
-            let output = Pipe()
-            let errors = Pipe()
-            process.standardOutput = output
-            process.standardError = errors
-            process.terminationHandler = { process in
-                let stdout = output.fileHandleForReading.readDataToEndOfFile()
-                let stderr = errors.fileHandleForReading.readDataToEndOfFile()
-                if process.terminationStatus == 0 {
-                    do { continuation.resume(returning: try JSONDecoder().decode(UploadResult.self, from: stdout)) }
-                    catch { continuation.resume(throwing: error) }
-                } else {
-                    let detail = String(data: stderr, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    continuation.resume(throwing: NSError(domain: "SagoMedia", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: detail?.isEmpty == false ? detail! : "Upload failed"] ))
-                }
+    func startLogin() async throws -> DeviceRequest {
+        var request = URLRequest(url: baseURL.appending(path: "/v1/auth/device"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["deviceName": Host.current().localizedName ?? "Mac"])
+        return try await send(request, as: DeviceRequest.self)
+    }
+
+    func waitForApproval(_ device: DeviceRequest) async throws -> String {
+        let deadline = Date().addingTimeInterval(TimeInterval(device.expiresIn))
+        while Date() < deadline {
+            try await Task.sleep(for: .seconds(device.interval))
+            var request = URLRequest(url: baseURL.appending(path: "/v1/auth/device/\(device.deviceCode)"))
+            request.setValue("Device \(device.deviceSecret)", forHTTPHeaderField: "Authorization")
+            let status = try await send(request, as: DeviceStatus.self, acceptedStatuses: 200...499)
+            if status.status == "approved", let token = status.token {
+                try Keychain.save(token)
+                return status.scope ?? "upload"
             }
-            do { try process.run() }
-            catch { continuation.resume(throwing: error) }
+            if status.status == "denied" { throw MediaError.message("Access was denied") }
         }
+        throw MediaError.message("The access request expired")
     }
 
-    static func launchLogin() {
-        let process = command(arguments: ["auth", "login"])
-        try? process.run()
+    func upload(_ fileURL: URL) async throws -> UploadResult {
+        guard let token = try Keychain.load() else { throw MediaError.message("Sign in before uploading") }
+        var request = URLRequest(url: baseURL.appending(path: "/v1/uploads"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue(fileURL.lastPathComponent, forHTTPHeaderField: "X-Media-Filename")
+        request.httpBody = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+        return try await send(request, as: UploadResult.self)
+    }
+
+    private func send<Value: Decodable>(_ request: URLRequest, as type: Value.Type, acceptedStatuses: ClosedRange<Int> = 200...299) async throws -> Value {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, acceptedStatuses.contains(http.statusCode) else {
+            let detail = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw MediaError.message(detail?.isEmpty == false ? detail! : "Sago Media request failed")
+        }
+        do { return try JSONDecoder().decode(type, from: data) }
+        catch { throw MediaError.message("Sago Media returned an invalid response") }
+    }
+}
+
+enum Keychain {
+    private static let service = "dev.hsichen.SagoMedia"
+    private static let account = "upload-token"
+
+    static func save(_ token: String) throws {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        SecItemDelete(query as CFDictionary)
+        var value = query
+        value[kSecValueData as String] = Data(token.utf8)
+        guard SecItemAdd(value as CFDictionary, nil) == errSecSuccess else { throw MediaError.message("Could not save credentials in Keychain") }
+    }
+
+    static func load() throws -> String? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else { throw MediaError.message("Could not read credentials from Keychain") }
+        return token
     }
 }
 
