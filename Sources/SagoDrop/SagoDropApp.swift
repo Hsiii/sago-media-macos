@@ -87,17 +87,32 @@ final class UploadModel {
         if panel.runModal() == .OK { upload(panel.urls) }
     }
 
-    func pasteFiles() {
+    func uploadCopiedFiles() {
         guard !isUploading else { return }
         let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
         let urls = (NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: options) as? [NSURL])?
             .map { $0 as URL } ?? []
         guard !urls.isEmpty else {
-            message = "Copy a supported file in Finder first"
+            message = "Copy a supported file first"
             NSSound.beep()
             return
         }
         upload(urls)
+    }
+
+    func downloadClipboard() {
+        guard !isUploading else { return }
+        do {
+            guard let url = try ClipboardFile.create() else {
+                message = "Clipboard is empty or unsupported"
+                NSSound.beep()
+                return
+            }
+            message = "Saved \(url.lastPathComponent) to Downloads"
+        } catch {
+            message = "Couldn’t save to Downloads"
+            NSSound.beep()
+        }
     }
 
     func upload(_ urls: [URL]) {

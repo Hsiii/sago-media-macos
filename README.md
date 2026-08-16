@@ -18,7 +18,7 @@ Sago Drop also uploads images and other videos when you want the same quick
 drop-to-link workflow.
 
 - **Drop, paste, or choose:** Upload directly from the menu bar without opening
-  a full app window.
+  a full app window, or turn clipboard content into a file in Downloads.
 - **Made for Mac recordings:** Convert MOV files locally before upload, using a
   lossless container conversion when possible.
 - **Link copied automatically:** Paste into Discord as soon as the upload
@@ -55,8 +55,10 @@ signing in is normally a one-time step.
 ## Upload
 
 - Drag supported files directly onto the menu-bar icon.
-- Copy files in Finder and choose **Paste Files** (`⌘V`).
-- Choose **Choose Files…** (`⌘O`) to use the standard file picker.
+- Copy files in Finder and choose **Upload Copied Files** (`⇧⌘V`).
+- Copy other content and choose **Save Clipboard** (`⌘V`) to save it as a
+  file in Downloads.
+- Choose **Upload Files…** (`⌘O`) to use the standard file picker.
 
 The menu-bar icon shows conversion and upload progress. After a successful
 upload, the public share URL is copied automatically. The five latest uploads
