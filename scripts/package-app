@@ -32,10 +32,10 @@ cask "sago-drop" do
   version "$version"
   sha256 "$sha256"
 
-  url "https://github.com/orangesago/sago-drop/releases/download/v#{version}/Sago-Drop-#{version}.zip"
+  url "https://github.com/sago-cream/sago-drop/releases/download/v#{version}/Sago-Drop-#{version}.zip"
   name "Sago Drop"
   desc "Upload files from the menu bar"
-  homepage "https://github.com/orangesago/sago-drop"
+  homepage "https://github.com/sago-cream/sago-drop"
 
   depends_on macos: :sonoma
 
