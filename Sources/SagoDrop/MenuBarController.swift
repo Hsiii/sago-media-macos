@@ -209,8 +209,20 @@ final class MenuBarController: NSObject, ObservableObject {
             menu.addItem(.separator())
         }
 
-        menu.addItem(actionItem("Paste Files", action: #selector(pasteFiles), keyEquivalent: "v", enabled: !model.isUploading))
-        menu.addItem(actionItem("Choose Files…", action: #selector(chooseFiles), keyEquivalent: "o", enabled: !model.isUploading))
+        menu.addItem(actionItem("Upload Files…", action: #selector(chooseFiles), keyEquivalent: "o", enabled: !model.isUploading))
+        menu.addItem(actionItem(
+            "Upload Copied Files",
+            action: #selector(uploadCopiedFiles),
+            keyEquivalent: "v",
+            modifiers: [.command, .shift],
+            enabled: !model.isUploading
+        ))
+        menu.addItem(actionItem(
+            "Save Clipboard",
+            action: #selector(downloadClipboard),
+            keyEquivalent: "v",
+            enabled: !model.isUploading
+        ))
 
         if !model.recent.isEmpty {
             menu.addItem(.separator())
@@ -233,19 +245,29 @@ final class MenuBarController: NSObject, ObservableObject {
             menu.addItem(actionItem("Sign In", action: #selector(signIn), enabled: !model.isUploading))
         }
         menu.addItem(.separator())
-        menu.addItem(actionItem("Quit Sago Drop", action: #selector(quit)))
+        menu.addItem(actionItem("Quit", action: #selector(quit)))
     }
 
-    private func actionItem(_ title: String, action: Selector, keyEquivalent: String = "", enabled: Bool = true) -> NSMenuItem {
+    private func actionItem(
+        _ title: String,
+        action: Selector,
+        keyEquivalent: String = "",
+        modifiers: NSEvent.ModifierFlags = [.command],
+        enabled: Bool = true
+    ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
         item.isEnabled = enabled
-        if !keyEquivalent.isEmpty { item.keyEquivalentModifierMask = [.command] }
+        if !keyEquivalent.isEmpty { item.keyEquivalentModifierMask = modifiers }
         return item
     }
 
-    @objc private func pasteFiles() {
-        model.pasteFiles()
+    @objc private func uploadCopiedFiles() {
+        model.uploadCopiedFiles()
+    }
+
+    @objc private func downloadClipboard() {
+        model.downloadClipboard()
     }
 
     @objc private func chooseFiles() {
