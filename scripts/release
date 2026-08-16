@@ -43,5 +43,5 @@ gh release create "$tag" \
   "$cask"
 gh release edit "$tag" --draft=false --latest
 
-printf 'release=https://github.com/Hsiii/sago-drop/releases/tag/%s\n' "$tag"
+printf 'release=https://github.com/orangesago/sago-drop/releases/tag/%s\n' "$tag"
 printf 'cask=%s\n' "$cask"

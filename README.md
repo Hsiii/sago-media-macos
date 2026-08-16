@@ -3,7 +3,7 @@
 
   Turn Mac screen recordings that are too large for Discord into links you can paste instead.
 
-  <a href="https://github.com/Hsiii/sago-drop/releases/latest">Download latest release</a>
+  <a href="https://github.com/orangesago/sago-drop/releases/latest">Download latest release</a>
    ·
   <a href="#install">Install with Homebrew</a>
 </div>
@@ -31,11 +31,11 @@ drop-to-link workflow.
 Install with Homebrew:
 
 ```bash
-brew install --cask Hsiii/tap/sago-drop
+brew install --cask orangesago/tap/sago-drop
 ```
 
 Or download the latest signed and notarized app from
-[GitHub Releases](https://github.com/Hsiii/sago-drop/releases/latest).
+[GitHub Releases](https://github.com/orangesago/sago-drop/releases/latest).
 
 Requirements:
 
@@ -85,7 +85,7 @@ remain available under **Recent Uploads**.
   are accepted as conversion sources; other files must fit the upload limit
   already.
 - **Homebrew installed an older version:** Run `brew update`, then
-  `brew upgrade --cask Hsiii/tap/sago-drop`.
+  `brew upgrade --cask orangesago/tap/sago-drop`.
 - **Two menu-bar icons appear:** Quit either the development build or the
   installed app so only one copy remains open.
 
@@ -128,7 +128,7 @@ scripts/release <version> "<user-facing change>"
 
 The release script uses the `Sago Drop` notarytool Keychain profile by default,
 publishes the ZIP and cask without changing `main`, and leaves the generated
-cask ready for a pull request to `Hsiii/homebrew-tap`.
+cask ready for a pull request to `orangesago/homebrew-tap`.
 
 ## License
 
