@@ -12,7 +12,7 @@ enum MenuBarState: Equatable {
     var symbolName: String {
         switch self {
         case .idle, .targeted: "square.and.arrow.up"
-        case .converting: "arrow.triangle.2.circlepath"
+        case .converting: "gearshape.2"
         case .uploading: "arrow.up.circle.fill"
         case .success: "checkmark.circle.fill"
         case .failure: "exclamationmark.triangle.fill"
@@ -31,6 +31,12 @@ enum MenuBarState: Equatable {
     }
 
     var isBusy: Bool { self == .converting || self == .uploading }
+}
+
+enum PreparingGearMotion {
+    static func rotations(at time: TimeInterval) -> (large: Double, small: Double) {
+        (large: time * 72, small: time * -108)
+    }
 }
 
 @MainActor
@@ -392,11 +398,6 @@ private struct MenuBarIcon: View {
                         value: controller.targetedEffectTrigger
                     )
                     .symbolEffect(
-                        .rotate,
-                        options: .repeating,
-                        isActive: controller.displayedState == .converting
-                    )
-                    .symbolEffect(
                         .breathe.byLayer,
                         options: .repeating,
                         isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
@@ -429,7 +430,9 @@ private struct MenuBarIcon: View {
 
     @ViewBuilder
     private var iconContent: some View {
-        if controller.displayedState == .uploading, let progress = controller.uploadProgress {
+        if controller.displayedState == .converting {
+            PreparingGearsIcon()
+        } else if controller.displayedState == .uploading, let progress = controller.uploadProgress {
             UploadProgressIcon(progress: progress)
         } else {
             currentIcon
@@ -443,11 +446,6 @@ private struct MenuBarIcon: View {
             .symbolEffect(
                 .wiggle.up.byLayer,
                 value: controller.targetedEffectTrigger
-            )
-            .symbolEffect(
-                .rotate,
-                options: .repeating,
-                isActive: controller.displayedState == .converting
             )
             .symbolEffect(
                 .breathe.byLayer,
@@ -473,11 +471,6 @@ private struct MenuBarIcon: View {
                 value: controller.targetedEffectTrigger
             )
             .symbolEffect(
-                .pulse,
-                options: .repeating,
-                isActive: controller.displayedState == .converting
-            )
-            .symbolEffect(
                 .variableColor.iterative.reversing,
                 options: .repeating,
                 isActive: controller.displayedState == .uploading && controller.uploadProgress == nil
@@ -491,6 +484,31 @@ private struct MenuBarIcon: View {
                 options: .repeat(2),
                 value: controller.failureEffectTrigger
             )
+    }
+}
+
+private struct PreparingGearsIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+            let rotations = PreparingGearMotion.rotations(
+                at: context.date.timeIntervalSinceReferenceDate
+            )
+
+            ZStack {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 10, weight: .regular))
+                    .rotationEffect(.degrees(reduceMotion ? 0 : rotations.large))
+                    .offset(x: -2.5, y: 2.5)
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 7, weight: .regular))
+                    .rotationEffect(.degrees(reduceMotion ? 0 : rotations.small))
+                    .offset(x: 3.5, y: -3.5)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
     }
 }
 

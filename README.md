@@ -11,7 +11,7 @@
 ## Why
 
 Discord rejects videos once they get too large, but sending a link is easy. Drop
-the recording on Sago Drop's menu-bar icon; it converts MOV files locally,
+the recording on Sago Drop's menu-bar icon; it normalizes the video locally,
 uploads the video, and copies a share link ready to paste into Discord.
 
 Sago Drop also uploads images and other videos when you want the same quick
@@ -19,12 +19,12 @@ drop-to-link workflow.
 
 - **Drop, paste, or choose:** Upload directly from the menu bar without opening
   a full app window, or turn clipboard content into a file in Downloads.
-- **Made for Mac recordings:** Convert MOV files locally before upload, using a
-  lossless container conversion when possible.
+- **Made for Apple recordings:** Normalize MOV and MP4 files locally to a
+  shareable 1080p H.264 MP4 before upload.
 - **Link copied automatically:** Paste into Discord as soon as the upload
   finishes.
-- **Native and local where it matters:** The app is signed and notarized, MOV
-  conversion stays on the Mac, and its device credential lives in Keychain.
+- **Native and local where it matters:** The app is signed and notarized, video
+  processing stays on the Mac, and its device credential lives in Keychain.
 
 ## Install
 
@@ -66,16 +66,15 @@ remain available under **Recent Uploads**.
 
 ## Formats and Limits
 
-- MOV recordings can be up to 500 MB. Sago Drop first tries a lossless MP4
-  container conversion, then compresses locally when necessary.
-- The converted upload must fit within 90 MB.
+- MOV and MP4 videos are normalized locally to 1080p H.264/AAC MP4 and targeted
+  below 80 MB before upload.
 - Other supported files must already be under 90 MB.
-- Supported formats: PNG, JPEG, GIF, WebP, MOV, MP4, and WebM.
+- Supported formats: PNG, JPEG, GIF, WebP, MOV, and MP4.
 
 ## Privacy
 
 - The device credential is stored in macOS Keychain.
-- MOV conversion happens locally on the Mac.
+- Video processing happens locally on the Mac.
 - Files are uploaded to `media.hsichen.dev` and receive a public share URL.
 - Sago Drop has no analytics or background file scanning.
 
@@ -83,9 +82,8 @@ remain available under **Recent Uploads**.
 
 - **An upload asks you to sign in:** Choose **Sign In** and finish the browser
   approval before trying again.
-- **A file is rejected:** Check its format and the limits above. Large MOV files
-  are accepted as conversion sources; other files must fit the upload limit
-  already.
+- **A file is rejected:** Check its format and the limits above. MOV and MP4
+  files are prepared locally; images must fit the upload limit already.
 - **Homebrew installed an older version:** Run `brew update`, then
   `brew upgrade --cask sago-cream/tap/sago-drop`.
 - **Two menu-bar icons appear:** Quit either the development build or the

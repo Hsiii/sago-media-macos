@@ -68,7 +68,7 @@ final class UploadModel {
     var onSmokeTestComplete: ((Bool) -> Void)?
 #endif
     private let api = MediaAPI()
-    private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webm", "webp"])
+    private let supportedExtensions = Set(["gif", "jpeg", "jpg", "mov", "mp4", "png", "webp"])
     private var processingStartedAt: Date?
 
     func accepts(_ urls: [URL]) -> Bool {
@@ -120,7 +120,7 @@ final class UploadModel {
         let urls = urls.filter { $0.isFileURL && supportedExtensions.contains($0.pathExtension.lowercased()) }
         guard !isUploading else { return }
         guard !urls.isEmpty else {
-            report("Choose PNG, JPEG, GIF, WebP, MOV, MP4, or WebM files")
+            report("Choose PNG, JPEG, GIF, WebP, MOV, or MP4 files")
             NSSound.beep()
             return
         }
@@ -132,9 +132,9 @@ final class UploadModel {
             var failureStatus: String?
             for url in urls {
                 do {
-                    let isMOV = url.pathExtension.lowercased() == "mov"
-                    message = isMOV ? "Preparing \(url.lastPathComponent)…" : "Uploading \(url.lastPathComponent)…"
-                    onMenuBarStateChange?(isMOV ? .converting : .uploading)
+                    let isVideo = MediaPreparation.isVideo(url)
+                    message = isVideo ? "Preparing \(url.lastPathComponent)…" : "Uploading \(url.lastPathComponent)…"
+                    onMenuBarStateChange?(isVideo ? .converting : .uploading)
                     let prepared = try await MediaPreparation.prepare(url)
                     defer { prepared.cleanUp() }
                     if prepared.isTemporary { message = "Uploading converted MP4…" }

@@ -1,16 +1,17 @@
 import AppKit
+@preconcurrency import AVFoundation
 import Foundation
 import Testing
 @testable import SagoDrop
 
-@Test func rejectsOversizedSourceBeforeConversion() async throws {
+@Test func rejectsOversizedNonVideoBeforeUpload() async throws {
     let url = FileManager.default.temporaryDirectory
-        .appending(path: "sago-drop-oversized-\(UUID().uuidString).mov")
+        .appending(path: "sago-drop-oversized-\(UUID().uuidString).png")
     defer { try? FileManager.default.removeItem(at: url) }
 
     FileManager.default.createFile(atPath: url.path, contents: nil)
     let handle = try FileHandle(forWritingTo: url)
-    try handle.truncate(atOffset: UInt64(MediaPreparation.maximumSourceBytes + 1))
+    try handle.truncate(atOffset: UInt64(MediaPreparation.maximumUploadBytes + 1))
     try handle.close()
 
     await #expect(throws: MediaError.self) {
@@ -31,12 +32,46 @@ import Testing
 }
 
 @MainActor
-@Test func acceptsSupportedDroppedFilesIncludingMOV() {
+@Test func preparesMp4AsANewLocalUpload() async throws {
+    let source = FileManager.default.temporaryDirectory
+        .appending(path: "sago-drop-source-\(UUID().uuidString).mp4")
+    defer { try? FileManager.default.removeItem(at: source) }
+    try await createTestVideo(at: source)
+
+    let prepared = try await MediaPreparation.prepare(source)
+    defer { prepared.cleanUp() }
+
+    #expect(prepared.isTemporary)
+    #expect(prepared.url != source)
+    #expect(prepared.url.pathExtension == "mp4")
+    #expect(FileManager.default.fileExists(atPath: prepared.url.path))
+    #expect((try prepared.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= MediaPreparation.maximumUploadBytes)
+
+    let asset = AVURLAsset(url: prepared.url)
+    let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+    let format = try #require(try await track.load(.formatDescriptions).first)
+    #expect(CMFormatDescriptionGetMediaSubType(format) == kCMVideoCodecType_H264)
+    let metadata = try await asset.load(.commonMetadata)
+    #expect(AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .commonIdentifierTitle).isEmpty)
+}
+
+@MainActor
+@Test func acceptsLocallyPreparedVideoFormats() {
     let model = UploadModel()
 
     #expect(model.accepts([URL(fileURLWithPath: "/tmp/recording.mov")]))
+    #expect(model.accepts([URL(fileURLWithPath: "/tmp/recording.mp4")]))
     #expect(model.accepts([URL(fileURLWithPath: "/tmp/image.png")]))
+    #expect(!model.accepts([URL(fileURLWithPath: "/tmp/recording.webm")]))
     #expect(!model.accepts([URL(fileURLWithPath: "/tmp/archive.zip")]))
+}
+
+@Test func usesCounterRotatingGearsWhilePreparingVideo() {
+    #expect(MenuBarState.converting.symbolName == "gearshape.2")
+    let rotations = PreparingGearMotion.rotations(at: 1)
+    #expect(rotations.large > 0)
+    #expect(rotations.small < 0)
+    #expect(abs(rotations.small) > rotations.large)
 }
 
 @MainActor
@@ -86,4 +121,44 @@ import Testing
 
     #expect(file.pathExtension == "data")
     #expect(try Data(contentsOf: file) == payload)
+}
+
+@MainActor
+private func createTestVideo(at url: URL) async throws {
+    let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+    let title = AVMutableMetadataItem()
+    title.identifier = .commonIdentifierTitle
+    title.value = "Private title" as NSString
+    writer.metadata = [title]
+    let input = AVAssetWriterInput(
+        mediaType: .video,
+        outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 640,
+            AVVideoHeightKey: 480,
+        ]
+    )
+    let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input)
+    guard writer.canAdd(input) else { throw MediaError.message("Could not create test video") }
+    writer.add(input)
+    writer.startWriting()
+    writer.startSession(atSourceTime: .zero)
+
+    var pixelBuffer: CVPixelBuffer?
+    guard CVPixelBufferCreate(nil, 640, 480, kCVPixelFormatType_32BGRA, nil, &pixelBuffer) == kCVReturnSuccess,
+          let pixelBuffer else {
+        throw MediaError.message("Could not create test video frame")
+    }
+    CVPixelBufferLockBaseAddress(pixelBuffer, [])
+    if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
+        memset(baseAddress, 0, CVPixelBufferGetDataSize(pixelBuffer))
+    }
+    guard adaptor.append(pixelBuffer, withPresentationTime: .zero) else {
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        throw writer.error ?? MediaError.message("Could not write test video frame")
+    }
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+    input.markAsFinished()
+    await writer.finishWriting()
+    if let error = writer.error { throw error }
 }
