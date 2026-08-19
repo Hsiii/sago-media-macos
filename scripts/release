@@ -42,6 +42,7 @@ gh release create "$tag" \
   "$archive" \
   "$cask"
 gh release edit "$tag" --draft=false --latest
+scripts/update-homebrew "$version" "$cask"
 
 printf 'release=https://github.com/sago-cream/sago-drop/releases/tag/%s\n' "$tag"
 printf 'cask=%s\n' "$cask"

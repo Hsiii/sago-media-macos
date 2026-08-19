@@ -127,8 +127,9 @@ scripts/release <version> "<user-facing change>"
 ```
 
 The release script uses the `Sago Drop` notarytool Keychain profile by default,
-publishes the ZIP and cask without changing `main`, and leaves the generated
-cask ready for a pull request to `sago-cream/homebrew-tap`.
+publishes the ZIP and cask without changing `main`, then updates
+`sago-cream/homebrew-tap` using the current GitHub CLI login. If only the tap
+update needs to be retried, run `scripts/update-homebrew <version>`.
 
 ## License
 
