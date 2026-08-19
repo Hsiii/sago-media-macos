@@ -12,7 +12,7 @@ enum MenuBarState: Equatable {
     var symbolName: String {
         switch self {
         case .idle, .targeted: "square.and.arrow.up"
-        case .converting: "arrow.triangle.2.circlepath"
+        case .converting: "gearshape.2"
         case .uploading: "arrow.up.circle.fill"
         case .success: "checkmark.circle.fill"
         case .failure: "exclamationmark.triangle.fill"
@@ -392,7 +392,7 @@ private struct MenuBarIcon: View {
                         value: controller.targetedEffectTrigger
                     )
                     .symbolEffect(
-                        .rotate,
+                        .rotate.byLayer,
                         options: .repeating,
                         isActive: controller.displayedState == .converting
                     )
@@ -445,7 +445,7 @@ private struct MenuBarIcon: View {
                 value: controller.targetedEffectTrigger
             )
             .symbolEffect(
-                .rotate,
+                .rotate.byLayer,
                 options: .repeating,
                 isActive: controller.displayedState == .converting
             )

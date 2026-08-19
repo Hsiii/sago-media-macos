@@ -39,6 +39,10 @@ import Testing
     #expect(!model.accepts([URL(fileURLWithPath: "/tmp/archive.zip")]))
 }
 
+@Test func usesLayeredGearsWhilePreparingVideo() {
+    #expect(MenuBarState.converting.symbolName == "gearshape.2")
+}
+
 @MainActor
 @Test func createsTextClipboardFileWithoutOverwriting() throws {
     let pasteboard = NSPasteboard(name: .init("SagoDropTests-\(UUID().uuidString)"))
