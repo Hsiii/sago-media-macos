@@ -35,6 +35,8 @@ enum MenuBarState: Equatable {
 
 @MainActor
 final class MenuBarController: NSObject, ObservableObject {
+    private static let suppressStatusDialogsKey = "suppressStatusDialogs"
+
     @Published private(set) var displayedState = MenuBarState.idle
     @Published private(set) var uploadProgress: Double?
     @Published private(set) var targetedEffectTrigger = 0
@@ -51,6 +53,7 @@ final class MenuBarController: NSObject, ObservableObject {
     private var progressTailTask: Task<Void, Never>?
     private var uploadPercentage: Int?
     private var isFinishingUpload = false
+    private var statusAlert: NSAlert?
 
     init(model: UploadModel) {
         self.model = model
@@ -62,6 +65,9 @@ final class MenuBarController: NSObject, ObservableObject {
         }
         model.onUploadProgressChange = { [weak self] update in
             self?.updateUploadProgress(update)
+        }
+        model.onStatus = { [weak self] status in
+            self?.presentStatus(status)
         }
     }
 
@@ -202,13 +208,6 @@ final class MenuBarController: NSObject, ObservableObject {
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        if !model.message.isEmpty {
-            let status = NSMenuItem(title: model.message, action: nil, keyEquivalent: "")
-            status.isEnabled = false
-            menu.addItem(status)
-            menu.addItem(.separator())
-        }
-
         menu.addItem(actionItem("Upload Files…", action: #selector(chooseFiles), keyEquivalent: "o", enabled: !model.isUploading))
         menu.addItem(actionItem(
             "Upload Copied Files",
@@ -262,6 +261,39 @@ final class MenuBarController: NSObject, ObservableObject {
         return item
     }
 
+    private func presentStatus(_ status: String) {
+        guard !UserDefaults.standard.bool(forKey: Self.suppressStatusDialogsKey) else { return }
+
+        if let statusAlert {
+            statusAlert.informativeText = status
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self,
+                  !UserDefaults.standard.bool(forKey: Self.suppressStatusDialogsKey),
+                  statusAlert == nil else { return }
+
+            let alert = NSAlert()
+            alert.messageText = "Sago Drop"
+            alert.informativeText = status
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "Don't show this again"
+            statusAlert = alert
+
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            alert.runModal()
+
+            if alert.suppressionButton?.state == .on {
+                UserDefaults.standard.set(true, forKey: Self.suppressStatusDialogsKey)
+            }
+            statusAlert = nil
+        }
+    }
+
     @objc private func uploadCopiedFiles() {
         model.uploadCopiedFiles()
     }
@@ -277,7 +309,7 @@ final class MenuBarController: NSObject, ObservableObject {
     @objc private func copyRecentLink(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? String else { return }
         model.copy(url)
-        model.message = "Copied link"
+        model.report("Copied link")
     }
 
     @objc private func signIn() {
