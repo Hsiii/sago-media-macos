@@ -126,10 +126,11 @@ Release from a clean `main` that exactly matches `origin/main`:
 scripts/release <version> "<user-facing change>"
 ```
 
-The release script uses the `Sago Drop` notarytool Keychain profile by default,
-publishes the ZIP and cask without changing `main`, then updates
-`sago-cream/homebrew-tap` using the current GitHub CLI login. If only the tap
-update needs to be retried, run `scripts/update-homebrew <version>`.
+The release script uses the existing `Sago Media` notarytool Keychain profile
+by default (override it with `SAGO_DROP_NOTARY_PROFILE`), publishes the ZIP and
+cask without changing `main`, then updates `sago-cream/homebrew-tap` using the
+current GitHub CLI login. If only the tap update needs to be retried, run
+`scripts/update-homebrew <version>`.
 
 ## License
 
