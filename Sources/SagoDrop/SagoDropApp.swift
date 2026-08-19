@@ -61,6 +61,7 @@ final class UploadModel {
     var message = ""
     var recent: [UploadResult] = []
     var onMenuBarStateChange: ((MenuBarState) -> Void)?
+    var onStatus: ((String) -> Void)?
     var isSignedIn: Bool { (try? Keychain.load()) != nil }
     var onUploadProgressChange: ((UploadProgressUpdate?) -> Void)?
 #if DEBUG
@@ -93,7 +94,7 @@ final class UploadModel {
         let urls = (NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: options) as? [NSURL])?
             .map { $0 as URL } ?? []
         guard !urls.isEmpty else {
-            message = "Copy a supported file first"
+            report("Copy a supported file first")
             NSSound.beep()
             return
         }
@@ -104,13 +105,13 @@ final class UploadModel {
         guard !isUploading else { return }
         do {
             guard let url = try ClipboardFile.create() else {
-                message = "Clipboard is empty or unsupported"
+                report("Clipboard is empty or unsupported")
                 NSSound.beep()
                 return
             }
-            message = "Saved \(url.lastPathComponent) to Downloads"
+            report("Saved \(url.lastPathComponent) to Downloads")
         } catch {
-            message = "Couldn’t save to Downloads"
+            report("Couldn’t save to Downloads")
             NSSound.beep()
         }
     }
@@ -119,7 +120,7 @@ final class UploadModel {
         let urls = urls.filter { $0.isFileURL && supportedExtensions.contains($0.pathExtension.lowercased()) }
         guard !isUploading else { return }
         guard !urls.isEmpty else {
-            message = "Choose PNG, JPEG, GIF, WebP, MOV, MP4, or WebM files"
+            report("Choose PNG, JPEG, GIF, WebP, MOV, MP4, or WebM files")
             NSSound.beep()
             return
         }
@@ -127,6 +128,8 @@ final class UploadModel {
         message = urls.count == 1 ? "Uploading \(urls[0].lastPathComponent)…" : "Uploading \(urls.count) files…"
         Task {
             var failed = false
+            var completionStatus = message
+            var failureStatus: String?
             for url in urls {
                 do {
                     let isMOV = url.pathExtension.lowercased() == "mov"
@@ -164,16 +167,19 @@ final class UploadModel {
                     processingStartedAt = nil
                     recent.insert(result, at: 0)
                     copy(result.url)
-                    message = "Copied \(url.lastPathComponent)"
+                    completionStatus = "Copied \(url.lastPathComponent)"
+                    message = completionStatus
                 } catch {
                     failed = true
                     processingStartedAt = nil
                     onUploadProgressChange?(nil)
+                    failureStatus = error.localizedDescription
                     message = error.localizedDescription
                     NSSound.beep()
                 }
             }
             isUploading = false
+            report(failureStatus ?? completionStatus)
             onMenuBarStateChange?(failed ? .failure : .success)
 #if DEBUG
             onSmokeTestComplete?(!failed)
@@ -190,10 +196,11 @@ final class UploadModel {
                 let device = try await api.startLogin()
                 message = "Approve code \(device.userCode) in your browser"
                 NSWorkspace.shared.open(device.verificationUri)
+                onStatus?(message)
                 _ = try await api.waitForApproval(device)
-                message = ""
+                report("Signed in")
             } catch {
-                message = error.localizedDescription
+                report(error.localizedDescription)
                 NSSound.beep()
             }
             isUploading = false
@@ -204,11 +211,16 @@ final class UploadModel {
         guard !isUploading else { return }
         do {
             try Keychain.delete()
-            message = "Signed out"
+            report("Signed out")
         } catch {
-            message = error.localizedDescription
+            report(error.localizedDescription)
             NSSound.beep()
         }
+    }
+
+    func report(_ status: String) {
+        message = status
+        onStatus?(status)
     }
 
     func copy(_ value: String) {
