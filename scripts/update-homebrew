@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+version="${1:-}"
+cask="${2:-$root/dist/sago-drop.rb}"
+tap_repo="${SAGO_DROP_HOMEBREW_TAP_REPOSITORY:-sago-cream/homebrew-tap}"
+
+if ! [[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+  echo 'Usage: scripts/update-homebrew <version> [cask]' >&2
+  exit 1
+fi
+if [ ! -f "$cask" ]; then
+  echo "Missing cask: $cask" >&2
+  exit 1
+fi
+if ! grep -Fqx "  version \"$version\"" "$cask"; then
+  echo "Cask does not contain version $version: $cask" >&2
+  exit 1
+fi
+
+temporary_dir="$(mktemp -d)"
+trap 'rm -rf -- "$temporary_dir"' EXIT
+tap_dir="$temporary_dir/tap"
+
+gh repo clone "$tap_repo" "$tap_dir" -- --depth 1
+mkdir -p "$tap_dir/Casks"
+cp "$cask" "$tap_dir/Casks/sago-drop.rb"
+
+if [ -z "$(git -C "$tap_dir" status --porcelain -- Casks/sago-drop.rb)" ]; then
+  echo "Homebrew tap already contains Sago Drop v$version."
+else
+  git -C "$tap_dir" add Casks/sago-drop.rb
+  git -C "$tap_dir" commit -m "chore: update sago-drop to v$version"
+  git -C "$tap_dir" push origin HEAD
+fi
+
+printf 'tap=https://github.com/%s/blob/main/Casks/sago-drop.rb\n' "$tap_repo"
