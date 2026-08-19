@@ -20,39 +20,25 @@ private final class SendableExporter: @unchecked Sendable {
 }
 
 enum MediaPreparation {
-    static let maximumSourceBytes: Int64 = 500_000_000
     static let maximumUploadBytes: Int64 = 90_000_000
     private static let compressionTargetBytes: Int64 = 80_000_000
+    private static let videoExtensions = Set(["mov", "mp4"])
+
+    static func isVideo(_ url: URL) -> Bool {
+        videoExtensions.contains(url.pathExtension.lowercased())
+    }
 
     static func prepare(_ sourceURL: URL) async throws -> PreparedMedia {
         let sourceBytes = try fileSize(of: sourceURL)
-        let isQuickTimeMovie = sourceURL.pathExtension.lowercased() == "mov"
 
-        guard isQuickTimeMovie else {
+        guard isVideo(sourceURL) else {
             guard sourceBytes <= maximumUploadBytes else {
                 throw MediaError.message("This file is over the 90 MB upload limit")
             }
             return PreparedMedia(url: sourceURL, isTemporary: false)
         }
 
-        guard sourceBytes <= maximumSourceBytes else {
-            throw MediaError.message("Choose a MOV file smaller than 500 MB")
-        }
-
         let identifier = UUID().uuidString
-        let remuxedURL = FileManager.default.temporaryDirectory
-            .appending(path: "sago-drop-\(identifier)-remuxed.mp4")
-
-        do {
-            try await export(sourceURL, to: remuxedURL, preset: AVAssetExportPresetPassthrough)
-            if try fileSize(of: remuxedURL) <= maximumUploadBytes {
-                return PreparedMedia(url: remuxedURL, isTemporary: true)
-            }
-        } catch {
-            // Some QuickTime codecs cannot be placed in an MP4 without re-encoding.
-        }
-
-        try? FileManager.default.removeItem(at: remuxedURL)
         let compressedURL = FileManager.default.temporaryDirectory
             .appending(path: "sago-drop-\(identifier)-compressed.mp4")
         do {
@@ -72,7 +58,7 @@ enum MediaPreparation {
         } catch {
             try? FileManager.default.removeItem(at: compressedURL)
             if let mediaError = error as? MediaError { throw mediaError }
-            throw MediaError.message("This MOV file could not be converted to MP4")
+            throw MediaError.message("This video could not be converted to MP4")
         }
     }
 
@@ -85,10 +71,11 @@ enum MediaPreparation {
     ) async throws {
         let asset = AVURLAsset(url: sourceURL)
         guard let exporter = AVAssetExportSession(asset: asset, presetName: preset) else {
-            throw MediaError.message("This MOV format is not supported")
+            throw MediaError.message("This video format is not supported")
         }
 
         exporter.shouldOptimizeForNetworkUse = true
+        exporter.metadata = []
         if let fileLengthLimit { exporter.fileLengthLimit = fileLengthLimit }
         if forceVideoEncoding {
             exporter.videoComposition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset)
@@ -113,6 +100,10 @@ enum MediaPreparation {
                 }
             }
         }
+
+        let movie = AVMutableMovie(url: outputURL, options: nil)
+        movie.metadata = []
+        try movie.writeHeader(to: outputURL, fileType: .mp4, options: .addMovieHeaderToDestination)
     }
 
     private static func fileSize(of url: URL) throws -> Int64 {
