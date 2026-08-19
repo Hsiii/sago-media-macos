@@ -66,8 +66,12 @@ import Testing
     #expect(!model.accepts([URL(fileURLWithPath: "/tmp/archive.zip")]))
 }
 
-@Test func usesLayeredGearsWhilePreparingVideo() {
+@Test func usesCounterRotatingGearsWhilePreparingVideo() {
     #expect(MenuBarState.converting.symbolName == "gearshape.2")
+    let rotations = PreparingGearMotion.rotations(at: 1)
+    #expect(rotations.large > 0)
+    #expect(rotations.small < 0)
+    #expect(abs(rotations.small) > rotations.large)
 }
 
 @MainActor
